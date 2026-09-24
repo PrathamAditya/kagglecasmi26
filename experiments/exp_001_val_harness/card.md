@@ -41,9 +41,9 @@ Measurement. All classes.
 
 ## How to run
 
-  uv run python -m casmi.harness.build_val --config configs/exp_001.yaml
-  uv run python -m casmi.harness.evaluate --config configs/exp_001.yaml --limit 20 # smoke
-  uv run python -m casmi.harness.evaluate --config configs/exp_001.yaml # full
+1. uv run python -m casmi.harness.build_val --config configs/exp_001.yaml
+2. uv run python -m casmi.harness.evaluate --config configs/exp_001.yaml --limit 20 # smoke
+3. uv run python -m casmi.harness.evaluate --config configs/exp_001.yaml # full
 
 ## Results (n=250)
 
