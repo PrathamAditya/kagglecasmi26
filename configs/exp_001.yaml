@@ -1,0 +1,19 @@
+exp_id: exp_001
+description: Validation harness; exp_000 re-scored with loss decomposition
+predictor:
+  name: exp000
+  params: {check_legacy: 5}      # assert the port matches the original script on the first 5 molecules
+paths:
+  train: /home/amoeba/Desktop/enveda-CASMI26-molecule-id-mass-spectra/train.parquet
+  pool: /home/amoeba/Desktop/enveda-CASMI26-molecule-id-mass-spectra/pool.parquet   # adjust if elsewhere
+  val_dir: data/val
+  cache_dir: cache
+  out_dir: experiments/exp_001_val_harness/results
+val:
+  lib: enveda-np-examples
+  max_precursor_ppm: 20          # mimic "precursor inconsistent with structure → dropped"
+  min_base_peak: 1000            # mimic test cleaning
+diag: {ppm: 20.0, min_da: 0.01}  # reachability windows (matches exp_000 tolerance)
+regimes: [C1, C2, C3]
+lb_weights: {C1: 0.5, C2: 0.35, C3: 0.15}   # placeholder; refit from LB submissions
+kaggle: {train: auto, pool: auto}

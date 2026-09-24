@@ -1,0 +1,20 @@
+exp_id: exp_000
+code: casmi_spectral_retrieval_cpu.py
+library:
+  match_key: raw_precursor_mz      # not neutral mass
+  precursor_tol: {abs_da: 0.01, ppm: 20}
+  max_candidates_per_spectrum: 256 # truncated by mass distance
+  similarity: greedy_cosine
+  fragment_tol_da: 0.01
+  intensity_transform: none
+  cleaning: none
+  aggregate_over_spectra: max
+pool:
+  tol: {abs_da: 0.01, ppm: 20}
+  sort: [in_train desc, in_coconut desc, adduct_shift_rank, mass_error]
+ranking:
+  strong_score: 0.20
+  max_spectral_guesses: 12
+  max_guesses: 25
+  dedup_key: smiles
+result: {public_lb: 0.127}

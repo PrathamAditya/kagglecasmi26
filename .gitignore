@@ -1,0 +1,13 @@
+data/
+cache/
+experiments/*/results/
+__pycache__/
+*.pyc
+.venv/
+data/raw/
+data/val/*.parquet
+cache/
+.venv/
+__pycache__/
+*.pyc
+experiments/*/run.log
