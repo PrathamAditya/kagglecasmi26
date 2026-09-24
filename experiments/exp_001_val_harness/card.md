@@ -35,9 +35,9 @@ Measurement. All classes.
 
 ## Success criterion (set before running)
 
-1. ~~Runs end-to-end on real data in < 15 min on the local machine.~~ ✗ Took ~12 min total (269s + 241s + 245s). Exceeded for full 3-regime run, but acceptable.
-2. ~~Loss buckets + 20 worst molecules per regime written.~~ ✓
-3. ~~`leak_hits` = 0 in C2/C3.~~ ✓ Fixed with tautomer-twin exclusion.
+1. Runtime: Completed in ~12.5 min total (269s + 241s + 245s across 3 regimes). Within the < 15 min threshold on the local machine. [PASS]
+2. Artifacts: Loss buckets and 20 worst molecules per regime successfully generated. [PASS]
+3. Data Leakage: leak_hits = 0 confirmed in C2/C3 via tautomer-twin exclusion. [PASS]
 
 ## How to run
 
