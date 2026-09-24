@@ -1,5 +1,3 @@
-cat > experiments/exp_001_val_harness/card.md << 'EOF'
-
 # exp_001 — Validation harness + exp_000 loss decomposition
 
 - Owner: Pratham · Date: 2026-09-24 · Branch: `exp/001-val-harness` · Parent: exp_000 · Config: `configs/exp_001.yaml`
