@@ -7,8 +7,8 @@ from .base import Candidate, Predictor
 
 REGISTRY = {
     "exp000": "casmi.predictors.exp000:Exp000Predictor",
+    "exp002": "casmi.predictors.exp002:Exp002Predictor",
 }
-
 
 def build_predictor(name: str, params: dict | None = None) -> Predictor:
     module, cls = REGISTRY[name].split(":")

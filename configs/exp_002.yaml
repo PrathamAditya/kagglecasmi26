@@ -1,0 +1,28 @@
+exp_id: exp_002
+description: Candidate-generation correctness — neutral-mass library match, 10 ppm, structure-level cap, metric-ik14 dedup
+predictor:
+  name: exp002
+  params:
+    ppm: 10.0                  # val p99 = 6.6 ppm
+    min_da: 0.005
+    fragment_tol: 0.01
+    max_structures: 400        # cap counts STRUCTURES, not spectra
+    spectra_per_structure: 30
+    cross_adduct_penalty: 0.7
+    strong_score: 0.20
+    max_library_guesses: 12
+    cache_dir: cache
+paths:
+  train: /home/amoeba/Desktop/enveda-CASMI26-molecule-id-mass-spectra/train.parquet
+  pool: /home/amoeba/Desktop/enveda-CASMI26-molecule-id-mass-spectra/pool.parquet   # adjust if elsewhere
+  val_dir: data/val
+  cache_dir: cache
+  out_dir: experiments/exp_002_correctness/results
+diag: {ppm: 10.0, min_da: 0.005}   # reachability windows must match the predictor
+val:
+  lib: enveda-np-examples
+  max_precursor_ppm: 20          # mimic "precursor inconsistent with structure → dropped"
+  min_base_peak: 1000            # mimic test cleaning
+regimes: [C1, C2, C3]
+lb_weights: {C1: 0.5, C2: 0.35, C3: 0.15}   # placeholder; refit from LB submissions
+kaggle: {train: auto, pool: auto}

@@ -23,3 +23,10 @@ def test_metric_ignores_stereo():
     a = metric_ik14("OC[C@H]1OC(O)[C@H](O)[C@@H](O)[C@@H]1O")
     b = metric_ik14("OCC1OC(O)C(O)C(O)C1O")
     assert a == b == "WQZGKKKJIJFFOK"
+
+def test_formula_mass():
+    from casmi.chem import formula_mass
+    assert abs(formula_mass("C6H12O6") - 180.0633881) < 1e-6
+    assert abs(formula_mass("C8H10N4O2") - 194.0803756) < 1e-6   # caffeine
+    assert abs(formula_mass("C27H30O16") - 610.153385) < 1e-5    # rutin
+    assert formula_mass(None) != formula_mass(None)              # nan
