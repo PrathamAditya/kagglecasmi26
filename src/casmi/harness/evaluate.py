@@ -163,6 +163,7 @@ def main() -> None:
     ap.add_argument("--regimes", nargs="*")
     ap.add_argument("--limit", type=int, default=0, help="first N molecules only (smoke test)")
     args = ap.parse_args()
+    git = git_state()             # captured at start: the hash that produced these numbers
     cfg = load_config(args.config)
     paths = cfg["paths"]
     val_dir, out_dir = Path(paths["val_dir"]), Path(paths["out_dir"])
@@ -181,7 +182,7 @@ def main() -> None:
 
     w = cfg["lb_weights"]
     est = sum(w[r] * summaries[r]["mrr"] for r in summaries) / sum(w[r] for r in summaries)
-    final = dict(exp_id=cfg["exp_id"], git=git_state(), predictor=cfg["predictor"], limit=args.limit,
+    final = dict(exp_id=cfg["exp_id"], git=git, predictor=cfg["predictor"], limit=args.limit,
                  lb_weights=w, est_lb=round(est, 4), regimes=summaries)
     (out_dir / "results.json").write_text(json.dumps(final, indent=2))
 
