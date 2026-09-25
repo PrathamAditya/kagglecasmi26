@@ -81,6 +81,9 @@ def score(preds: dict, labels: pd.DataFrame, cache: IK14Cache, regime: str) -> p
         in_cand = rank is not None or any(c.key in truth for c in cands)
         src = {c.smiles: c.source for c in cands}
         leak = regime != "C1" and any(src.get(s) == "library" and keymap[s] == lab.metric_ik14 for s in top)
+        if regime == "C3":   # truth was removed from library AND pool: it may only come back as "generated"
+            leak |= any(c.source in ("library", "pool") and c.key in truth for c in cands)
+            leak |= any(src.get(s) in ("library", "pool") and keymap[s] == lab.metric_ik14 for s in top)
         rows.append(dict(molecule_id=lab.molecule_id, rank=rank, rr=0.0 if rank is None else 1.0 / rank,
                          in_candidates=in_cand, n_candidates=len(cands), leak=leak,
                          top3=" | ".join(top[:3])))
@@ -97,13 +100,16 @@ def bucket(r) -> str:
 
 def run_regime(regime, cfg, queries, labels, train_lf, pool_all, cache, out_dir) -> dict:
     paths, vcfg, dcfg = cfg["paths"], cfg["val"], cfg.get("diag", {"ppm": 20.0, "min_da": 0.01})
-    excl = exclusion(regime, vcfg["lib"], labels["inchikey14"].tolist() + tautomer_twins(train_lf, labels, cache))
+    excl_iks = labels["inchikey14"].tolist() + tautomer_twins(train_lf, labels, cache)
+    excl = exclusion(regime, vcfg["lib"], excl_iks)
     ref_lf = train_lf.filter(~excl)
     ref = ref_lf.select(["precursor_mz", "adduct", "inchikey14"]).collect().to_pandas()
     ref_counts = ref["inchikey14"].value_counts().to_dict()
     pool = regime_pool(pool_all, regime, labels, ref_counts)
 
     predictor = build_predictor(cfg["predictor"]["name"], cfg["predictor"].get("params"))
+    if regime == "C3":   # for predictors with a private candidate store (e.g. V27's npz pool)
+        predictor.pool_exclude_keys = frozenset(excl_iks) | frozenset(labels["metric_ik14"].dropna())
     t0 = time.time()
     predictor.prepare(ref_lf, pool, queries)
     t_prep = time.time() - t0
@@ -114,9 +120,13 @@ def run_regime(regime, cfg, queries, labels, train_lf, pool_all, cache, out_dir)
         diagnostics(queries, labels, ref, pool, dcfg["ppm"], dcfg["min_da"]), on="molecule_id")
     per = labels[["molecule_id", "smiles", "adducts", "n_spectra"]].merge(per, on="molecule_id")
     per["bucket"] = per.apply(bucket, axis=1)
+    if regime != "C1":   # input-level check: no reference spectrum of the truth may survive the filter
+        per["leak"] = per["leak"] | (per["n_ref_truth"] > 0)
 
     rdir = out_dir / regime; rdir.mkdir(parents=True, exist_ok=True)
     per.to_csv(rdir / "per_molecule.csv", index=False)
+    tops = {m: list(dict.fromkeys(c.smiles for c in cands))[:TOP_K] for m, cands in sorted(preds.items())}
+    (rdir / "top25.json").write_text(json.dumps(tops, indent=1))
     worst = per.sort_values(["rr", "in_candidates", "window_max"], ascending=[True, True, False]).head(20)
     worst.to_csv(rdir / "worst20.csv", index=False)
 
@@ -129,6 +139,8 @@ def run_regime(regime, cfg, queries, labels, train_lf, pool_all, cache, out_dir)
         oracle_mrr_given_candidates=round(per["in_candidates"].mean(), 4),
         crowded_windows_gt256=int((per["window_max"] > 256).sum()),
         leak_hits=int(per["leak"].sum()), runtime_prepare_s=round(t_prep, 1), runtime_total_s=round(t_total, 1),
+        runtime_per_molecule_s=round((t_total - t_prep) / max(len(per), 1), 2),
+        predictor_info=getattr(predictor, "calibration", None) or None,
     )
     (rdir / "summary.json").write_text(json.dumps(summary, indent=2))
     return summary
@@ -151,6 +163,7 @@ def main() -> None:
     ap.add_argument("--regimes", nargs="*")
     ap.add_argument("--limit", type=int, default=0, help="first N molecules only (smoke test)")
     args = ap.parse_args()
+    git = git_state()             # captured at start: the hash that produced these numbers
     cfg = load_config(args.config)
     paths = cfg["paths"]
     val_dir, out_dir = Path(paths["val_dir"]), Path(paths["out_dir"])
@@ -169,8 +182,8 @@ def main() -> None:
 
     w = cfg["lb_weights"]
     est = sum(w[r] * summaries[r]["mrr"] for r in summaries) / sum(w[r] for r in summaries)
-    final = dict(exp_id=cfg["exp_id"], predictor=cfg["predictor"], limit=args.limit, est_lb=round(est, 4),
-                 regimes=summaries)
+    final = dict(exp_id=cfg["exp_id"], git=git, predictor=cfg["predictor"], limit=args.limit,
+                 lb_weights=w, est_lb=round(est, 4), regimes=summaries)
     (out_dir / "results.json").write_text(json.dumps(final, indent=2))
 
     print(json.dumps(final, indent=2))

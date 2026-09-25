@@ -1,0 +1,8 @@
+{
+  "regime": "C1",
+  "n": 20,
+  "top1_equal": 20,
+  "identical_order": 20,
+  "min_overlap25": 6,
+  "gate_pass": true
+}

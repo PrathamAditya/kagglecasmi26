@@ -1,0 +1,83 @@
+  [V27] Loaded fp_merged_m1.pt: d=512, layers=6, step=24000
+  [V27] Loaded fp_single_s2.pt: d=512, layers=6, step=20000
+[V27] Neural FPNet Ensemble ready: 1 single + 1 merged on cpu
+[V27] Loaded 8 GBDT rankers (NFEAT=31)
+[V27] Candidate pool: 712,199 structures (2.7s)
+[V27] Reference Library loaded: 2,538,424 spectra / 275,810 unique structures (4.4s)
+[V27 PRECLEAN] 2,538,424 spectra  raw 3.21 GB -> cleaned 0.82 GB  (3.9s)
+[V27] Built representative analog set: 275,632 unique scaffolds.
+[V27 CFG] PPM_WIN=8.5  PPM_OFFSET=+1.284  MIN_DA=0.0018  ANALOG_FALLBACK=False
+{
+  "exp_id": "exp_016",
+  "git": {
+    "commit": "67337d9",
+    "dirty": true
+  },
+  "predictor": {
+    "name": "exp016_v27",
+    "params": {
+      "pool_npz": "artifacts/v17_builder/pool_712k_precomputed.npz",
+      "rankers": "artifacts/v17_builder/rankers_v17_ensemble.joblib",
+      "fp_models": "artifacts/fp_models",
+      "device": "cpu",
+      "torch_threads": 0,
+      "ppm_offset": 1.2840695818908054,
+      "ppm_win": 8.5,
+      "ppm_fallback": 30.0,
+      "int_floor": 0.002,
+      "max_peaks": 256,
+      "mz_tol": 0.01,
+      "int_power": 1.0,
+      "ent_weight": true,
+      "analog_win": 200.0,
+      "n_analog": 100,
+      "sim_power": 4.0,
+      "topn": 25,
+      "min_da": 0.0018,
+      "frag_soft_cap": 34,
+      "frag_hard_cap": 80,
+      "max_abs_offset": 5.0,
+      "use_analog_fallback": false,
+      "frag_workers": 4,
+      "nfeat": 31,
+      "calib_n_sample": 150,
+      "calib_sim_thresh": 0.9,
+      "calib_search_ppm": 25.0,
+      "calib_seed": 0,
+      "calib_min_pairs": 20
+    }
+  },
+  "limit": 20,
+  "lb_weights": {
+    "C1": 0.5,
+    "C2": 0.35,
+    "C3": 0.15
+  },
+  "est_lb": 0.8667,
+  "regimes": {
+    "C1": {
+      "regime": "C1",
+      "molecules": 20,
+      "mrr": 0.8667,
+      "recall_at_cand": 1.0,
+      "recall_at_25": 1.0,
+      "buckets": {
+        "hit@1": 16,
+        "hit@2-25": 4,
+        "cand_not_top25": 0,
+        "reachable_missed": 0,
+        "unreachable": 0
+      },
+      "oracle_mrr_given_candidates": 1.0,
+      "crowded_windows_gt256": 7,
+      "leak_hits": 0,
+      "runtime_prepare_s": 19.8,
+      "runtime_total_s": 90.0,
+      "runtime_per_molecule_s": 3.51,
+      "predictor_info": null
+    }
+  }
+}
+
+exp-log row:
+| 016 | done | | | | 0.867 |  |  | 0.867 | | | | |

@@ -1,13 +1,22 @@
-data/
+# Data (large, re-downloadable)
+data/*
+!data/val_ids_v2.parquet        # frozen validation list: must be versioned
+
+# Frozen V27 artifacts from Kaggle (pool npz, FPNet, rankers, RDKit wheel)
+artifacts/
+
+# Caches and run outputs
 cache/
 experiments/*/results/
-__pycache__/
-*.pyc
-.venv/
-data/raw/
-data/val/*.parquet
-cache/
-.venv/
-__pycache__/
-*.pyc
 experiments/*/run.log
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Secrets (just in case)
+.kaggle/
+kaggle.json
+access_token
