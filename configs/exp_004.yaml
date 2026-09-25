@@ -1,0 +1,35 @@
+exp_id: exp_004
+description: Zero-cap entropy search + analog channel for pool ranking (replaces per-structure cap tuning)
+predictor:
+  name: exp004
+  params:
+    ppm: 8.5
+    min_da: 0.005
+    ppm_offset: 1.4
+    fragment_tol: 0.01
+    int_floor: 0.002
+    max_peaks: 256
+    ent_weight: true
+    analog_win_da: 200.0
+    strong_score: 0.20
+    max_library_guesses: 12
+    max_pool_ranked: 25
+    cache_dir: cache
+    ppm_fallback: 30.0
+    n_analog: 100
+    sim_power: 4.0
+    coconut_bonus: 0.02
+paths:
+  train: /home/amoeba/Desktop/enveda-CASMI26-molecule-id-mass-spectra/train.parquet
+  pool: /home/amoeba/Desktop/enveda-CASMI26-molecule-id-mass-spectra/pool.parquet   # adjust if elsewhere
+  val_dir: data/val
+  cache_dir: cache
+  out_dir: experiments/exp_004_entropy_search/results
+diag: {ppm: 10.0, min_da: 0.005}   # reachability windows must match the predictor
+val:
+  lib: enveda-np-examples
+  max_precursor_ppm: 20          # mimic "precursor inconsistent with structure → dropped"
+  min_base_peak: 1000            # mimic test cleaning
+regimes: [C1, C2, C3]
+lb_weights: {C1: 0.5, C2: 0.35, C3: 0.15}   # placeholder; refit from LB submissions
+kaggle: {train: auto, pool: auto}

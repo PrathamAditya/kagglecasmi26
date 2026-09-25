@@ -1,7 +1,9 @@
 # plan.md — Phase A/B: anchor on V27, then build real ranker training data
 
 ## Why this plan (read once)
+
 exp_004–015 all failed for three shared reasons, not because the ideas were bad:
+
 1. **Wrong anchor.** Everything was compared to our own pipeline (est. LB 0.40,
    unverified). The only pipeline with a known LB score is the V27 notebook (0.334),
    and it was never run through the harness with its own pretrained artifacts.
@@ -22,9 +24,10 @@ The V27 prob as a feature is what protects C1; the edit generator is what unlock
 
 ---
 
-## Phase A — V27 anchor + harness hardening (exp_016)  ← do today
+## Phase A — V27 anchor + harness hardening (exp_016) ← do today
 
 ### A1. Run V27 as-is through the harness
+
 - Wrap the V27 notebook logic as `src/pipelines/v27.py` (import, don't rewrite the
   scoring). Uses the frozen pool, FPNet checkpoints, GBDT rankers.
 - The harness must remove the held-out structure (by InChIKey14 **and** metric
@@ -32,6 +35,7 @@ The V27 prob as a feature is what protects C1; the edit generator is what unlock
 - Output the standard per-regime table.
 
 ### A2. Harness fixes
+
 - Paired bootstrap CI of deltas (1,000 resamples) — shared function, used by every run.
 - Enlarge validation beyond enveda-np-examples' 250: add a held-out NP slice
   (riken + gnps + massbank, NP-like, prefer QTOF/timsTOF, ≤ 1 structure per scaffold),
@@ -42,6 +46,7 @@ The V27 prob as a feature is what protects C1; the edit generator is what unlock
 - Record in `docs/decisions.md` the class weights used for "est LB".
 
 ### Gate A (all must hold)
+
 - V27-in-harness runs end to end, leak_hits = 0.
 - Table printed for both the 250-set and val_v2.
 - V27's est LB vs our exp_004 est LB, with CI. **V27 becomes the anchor for all future
@@ -53,7 +58,7 @@ channel; if val_v2 takes >4 h, run it on Kaggle CPU / Modal and report.
 
 ---
 
-## Phase B — Training-group factory (exp_017)  ← start only after Gate A passes
+## Phase B — Training-group factory (exp_017) ← start only after Gate A passes
 
 Goal: thousands of candidate groups with labels, in the **same mixed regime
 distribution** as test.
@@ -72,8 +77,12 @@ distribution** as test.
   or Modal — parallelise by shard).
 - Report: groups built, positives per regime, % groups where truth is in the window,
   seconds per group.
+- Before building the factory, inspect artifacts/ranker_training_features: schema,
+  n groups, regimes, how groups were built. If usable, reuse it and extend it rather
+  than rebuilding. Report findings in handoff.md.
 
 ### Gate B
+
 - ≥ 3,000 groups, ≥ 1,000 with a positive in C2 regime.
 - Zero overlap with val sets (key + scaffold), asserted in code.
 - Spot check 5 groups by hand: truth label correct under the metric key.
@@ -81,10 +90,18 @@ distribution** as test.
 ---
 
 ## Out of scope for this plan
+
 - Training the new ranker (Phase C), edit generator for C3 (Phase D).
 - Any change to the V27 artifacts.
 - Any LB submission. Validate via Kaggle "commit" only if a runtime check is needed.
 
 ## Report back
+
 Overwrite `handoff.md` after Gate A and again after Gate B. Include the tables and
 anything surprising (especially the C1-drop bisect and V27-vs-exp_004 comparison).
+
+- Port reference/v27_patched_0334.ipynb into src/casmi/predictors/exp016_v27.py,
+  following the same interface as exp004.py. Load frozen artifacts from artifacts/.
+  Copy V27's scoring logic as-is; don't "improve" it during the port.
+- Sanity check: on 20 molecules, the port's top-25 lists must match the notebook run
+  on the same inputs (same order). If not, report the diff before running the full eval.
