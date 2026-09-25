@@ -28,11 +28,17 @@ The V27 prob as a feature is what protects C1; the edit generator is what unlock
 
 ### A1. Run V27 as-is through the harness
 
-- Wrap the V27 notebook logic as `src/pipelines/v27.py` (import, don't rewrite the
-  scoring). Uses the frozen pool, FPNet checkpoints, GBDT rankers.
-- The harness must remove the held-out structure (by InChIKey14 **and** metric
-  tautomer key) from the library for C2, and from library + pool for C3.
-- Output the standard per-regime table.
+- Source: reference/v27_patched_0334.ipynb (patched V27, LB 0.334)
+- Artifacts: artifacts/v17_builder/{pool_712k_precomputed.npz, rankers_v17_ensemble.joblib,
+  rep_analog_scaffolds.npz}, artifacts/fp_models/{fp_single_s2.pt, fp_merged_m1.pt}
+- Port into src/casmi/predictors/exp016_v27.py, same interface as exp004.py.
+  Copy scoring logic as-is; don't "improve" it during the port.
+- Harness removes the held-out structure (InChIKey14 AND metric tautomer key) from the
+  library for C2, and from library + pool for C3.
+- Sanity check on 20 molecules vs the notebook run on the same inputs:
+  identical top-1 for all 20, and ≥ 24/25 top-25 overlap each. Report any diff
+  before the full eval (small tie-order differences from numba fastmath / CPU vs GPU
+  FPNet are acceptable; anything more is a port bug).
 
 ### A2. Harness fixes
 
