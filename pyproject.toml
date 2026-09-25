@@ -15,6 +15,16 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest"]
+# V27 port (exp_016): frozen rankers were pickled with scikit-learn 1.6.1 — keep it pinned.
+v27 = ["torch", "scikit-learn==1.6.1", "joblib"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [build-system]
 requires = ["hatchling"]

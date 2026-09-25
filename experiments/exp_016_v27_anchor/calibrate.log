@@ -1,0 +1,38 @@
+  [V27] Loaded fp_merged_m1.pt: d=512, layers=6, step=24000
+  [V27] Loaded fp_single_s2.pt: d=512, layers=6, step=20000
+[V27] Neural FPNet Ensemble ready: 1 single + 1 merged on cpu
+[V27] Loaded 8 GBDT rankers (NFEAT=31)
+[V27] Candidate pool: 712,199 structures (2.7s)
+[V27] Reference Library loaded: 2,538,424 spectra / 275,810 unique structures (13.4s)
+[V27 PRECLEAN] 2,538,424 spectra  raw 3.21 GB -> cleaned 0.82 GB  (9.4s)
+[V27] Built representative analog set: 275,632 unique scaffolds.
+[CALIB] n=37  median=+1.284 ppm  MAD=0.777  p5=-0.01  p95=+3.74
+[V27 CFG] PPM_WIN=8.5  PPM_OFFSET=+1.284  MIN_DA=0.0018  ANALOG_FALLBACK=False
+{
+  "n_pairs": 37,
+  "offset_ppm": 1.2840695818908054,
+  "mad": 0.7769490232303687
+}
+	Command being timed: ".venv/bin/python -m casmi.harness.v27_sanity calibrate --config configs/exp_016.yaml"
+	User time (seconds): 89.79
+	System time (seconds): 21.90
+	Percent of CPU this job got: 261%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:42.79
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 14665016
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 6208
+	Minor (reclaiming a frame) page faults: 3409178
+	Voluntary context switches: 14641
+	Involuntary context switches: 191578
+	Swaps: 0
+	File system inputs: 2029040
+	File system outputs: 1312
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

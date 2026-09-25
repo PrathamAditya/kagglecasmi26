@@ -18,6 +18,9 @@ class Candidate:
 
 class Predictor(ABC):
     name = "base"
+    # Structure keys (raw InChIKey14 + metric key) the harness removed from the pool for this regime (C3).
+    # Predictors that carry a PRIVATE candidate store (not the `pool` frame) must drop these themselves.
+    pool_exclude_keys: frozenset[str] = frozenset()
 
     def __init__(self, **params):
         self.params = params

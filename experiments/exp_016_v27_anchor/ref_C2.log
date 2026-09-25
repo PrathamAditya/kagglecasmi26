@@ -1,0 +1,41 @@
+/run/media/amoeba/HDD/Kaggle/casmi26-project/casmi26/.venv/bin/python -m casmi.harness.v27_notebook_ref --notebook /run/media/amoeba/HDD/Kaggle/casmi26-project/casmi26/reference/casmi-four-channel-v27.ipynb --input-root /run/media/amoeba/HDD/Kaggle/casmi26-project/casmi26/cache/v27_ref/C2/input --workdir /run/media/amoeba/HDD/Kaggle/casmi26-project/casmi26/cache/v27_ref/C2/run --ppm-offset 1.2840695818908054
+[REF] ---- executing notebook cell 0 ----
+[REF] ---- executing notebook cell 1 ----
+[INFO] Competition directory: /run/media/amoeba/HDD/Kaggle/casmi26-project/casmi26/cache/v27_ref/C2/input/comp
+       Files available: ['train.parquet', 'sample_submission.csv', 'test.parquet']
+[SUCCESS] RDKit 2026.3.3 is active and verified.
+[REF] ---- executing notebook cell 2 ----
+[REF] ---- executing notebook cell 3 ----
+[REF] ---- executing notebook cell 4 ----
+[SUCCESS] 712k Candidate Pool (712,199 structures) loaded in 3.18s
+[REF] ---- executing notebook cell 5 ----
+[REF] ---- executing notebook cell 6 ----
+[REF] ---- executing notebook cell 7 ----
+[SUCCESS] Loaded 8 GBDT Rankers from rankers_v17_ensemble.joblib (NFEAT=31)
+[SUCCESS] Calibrated Ranker ensemble ready: 8 GBMs on 31 features.
+[REF] ---- executing notebook cell 8 ----
+[SMOKE] glucose InChIKey14 -> WQZGKKKJIJFFOK  (expect WQZGKKKJIJFFOK)
+[REF] ---- executing notebook cell 9 ----
+  Loaded fp_merged_m1.pt: d=512, layers=6, step=24000
+  Loaded fp_single_s2.pt: d=512, layers=6, step=20000
+[SUCCESS] Neural FPNet Ensemble ready: 1 single + 1 merged on cpu
+[INFO] Reference Library loaded: 2,532,734 spectra / 275,788 unique structures (31.0s)
+[PRECLEAN] 2,532,734 spectra  raw 3.21 GB -> cleaned 0.82 GB  (9.9s)
+[INFO] Built representative analog set: 275,610 unique scaffolds.
+[DIAG] train structures present in pool: 5000/5000 = 1.000
+[REF] calibrate_ppm_offset overridden -> +1.2841 ppm
+[CFG] PPM_WIN=8.5  PPM_OFFSET=+1.284  MIN_DA=0.0018  ANALOG_FALLBACK=False
+[INFO] Evaluating 108 spectra across 20 unique test molecules...
+  Processed 1/20 molecules | Elapsed: 55.2s
+  [TIMERS @ 1] analog=   2.1s(32.9%)  fpnet=   1.9s(30.7%)  lib=   1.8s(29.1%)  rank=   0.4s( 5.9%)  dedup=   0.1s( 1.1%)  frag=   0.0s( 0.2%)  cand=   0.0s( 0.0%)
+  Processed 20/20 molecules | Elapsed: 131.8s
+  [TIMERS @ 20] analog=  54.8s(66.2%)  dedup=  11.9s(14.3%)  fpnet=   6.2s( 7.5%)  rank=   4.1s( 5.0%)  frag=   3.8s( 4.6%)  lib=   1.9s( 2.3%)  cand=   0.0s( 0.0%)
+[INFO] absolute mass floor bound the window for 2/20 molecules
+[INFO] tautomer key cache: 446 distinct SMILES canonicalised
+
+[SUCCESS] submission.csv generated successfully with shape (20, 2) in 131.8s total.
+Exception ignored in: <function Pool.__del__ at 0x760173835120>
+Traceback (most recent call last):
+  File "/home/amoeba/snap/code/264/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/multiprocessing/pool.py", line 271, in __del__
+  File "/home/amoeba/snap/code/264/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/multiprocessing/queues.py", line 393, in put
+AttributeError: 'NoneType' object has no attribute 'dumps'
