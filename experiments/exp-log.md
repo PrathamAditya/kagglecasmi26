@@ -102,3 +102,8 @@ S03 → S05 is +0.014, which is within LB noise. The S05 patches aren't proven t
 - change: pool_712k_precomputed → pool_712k_fixedfp.npz; everything else = S05
 - LB: notebook threw exception (S09). Error: TODO paste log
 - verdict: pending
+### exp_021c (a03): has_ref penalty on top of fixed pool
+- git: 8a0bd5b (predictor patch) + alpha set to 0.3 for submission
+- local: C1 0.883 (exp_021: 0.889) | C2 0.607 (exp_021: 0.599, Δ +0.0075 [+0.0014,+0.0158], paired bootstrap)
+- LB: PENDING
+- verdict: pending
