@@ -70,6 +70,10 @@ class V27Config:
     calib_search_ppm: float = 25.0
     calib_seed: int = 0
     calib_min_pairs: int = 20
+    # exp_021c: demote candidates that HAVE reference spectra but match the query poorly.
+    # Hidden C2/C3 truths never have public spectra. alpha=1.0 disables (== exp_021).
+    ref_penalty_alpha: float = 1.0
+    ref_penalty_sim: float = 0.5
 
 
 # =====================================================================================
@@ -946,6 +950,8 @@ class Exp016V27Predictor(Predictor):
         del table; gc.collect()
         preclean_library(cfg, self.L)
         self.rep, self.rep_key, self.rep_nm = build_rep(self.L)
+        self.ref_keys = {k for k in self.L['ik'] if k}   # structures with spectra in THIS (regime-filtered) library
+        print(f"[V27] ref_keys: {len(self.ref_keys):,} structures with reference spectra")
 
         if self.ppm_offset_mode == "calibrate":
             te = queries.copy()
@@ -1025,6 +1031,10 @@ class Exp016V27Predictor(Predictor):
 
                 X = rank_features(cfp, lv, afp, sims, zlog, fsc, P_SIM=cfg.sim_power)[:, :cfg.nfeat]
                 p = np.mean([m.predict_proba(X)[:, 1] for m in self._rankers], axis=0)
+                if cfg.ref_penalty_alpha != 1.0:
+                    has_ref = np.fromiter((pool.keys[c] in self.ref_keys for c in cand), bool, len(cand))
+                    pen = has_ref & (lv < cfg.ref_penalty_sim)
+                    p = np.where(pen, p * cfg.ref_penalty_alpha, p)
                 order = np.argsort(-p)
 
                 ordered_raw_smis = [pool.smiles[cand[i]] for i in order]
