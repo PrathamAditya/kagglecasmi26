@@ -1,0 +1,59 @@
+exp_id: exp_021c_a03_c1
+description: exp_021 + ref penalty alpha=0.3, sim<0.5 (has_ref demotion)
+predictor:
+  name: exp016_v27
+  params:
+    # frozen V27 artifacts (read-only)
+    pool_npz: artifacts/v17_builder/pool_712k_fixedfp.npz
+    rankers: artifacts/v17_builder/rankers_v17_ensemble.joblib
+    fp_models: artifacts/fp_models
+    device: cpu                 # Kaggle ran FPNet on a T4; plan.md accepts CPU-vs-GPU tie drift
+    torch_threads: 0            # 0 = torch default
+    # A1: V27 self-calibrates the ppm offset on the file it predicts. Frozen here after one
+    # label-free calibration run (see experiments/exp_016_v27_anchor/card.md).
+    ppm_offset: 1.2840695818908054   # calibrate_ppm_offset(C1 lib, 250 val queries): n=37 pairs, MAD 0.777 ppm
+    # V27 CFG (cell 0) + patch-set CFG (cell 8), verbatim
+    ppm_win: 8.5
+    ppm_fallback: 30.0
+    int_floor: 0.002
+    max_peaks: 256
+    mz_tol: 0.01
+    int_power: 1.0
+    ent_weight: true
+    analog_win: 200.0
+    n_analog: 100
+    sim_power: 4.0
+    topn: 25
+    min_da: 0.0018
+    frag_soft_cap: 34
+    frag_hard_cap: 80
+    max_abs_offset: 5.0
+    use_analog_fallback: false
+    frag_workers: 4
+    nfeat: 31
+    calib_n_sample: 150
+    calib_sim_thresh: 0.90
+    calib_search_ppm: 25.0
+    calib_seed: 0
+    calib_min_pairs: 20
+    ref_penalty_alpha: 0.3
+    ref_penalty_sim: 0.5
+paths:
+  train: /home/amoeba/Desktop/enveda-CASMI26-molecule-id-mass-spectra/train.parquet
+  pool: /home/amoeba/Desktop/enveda-CASMI26-molecule-id-mass-spectra/pool.parquet
+  val_dir: data/val
+  cache_dir: cache
+  out_dir: experiments/exp_021c_a03_c1/results
+diag: {ppm: 8.5, min_da: 0.0018}   # reachability windows match V27's pool window
+val:
+  lib: enveda-np-examples
+  max_precursor_ppm: 20
+  min_base_peak: 1000
+regimes: [C1]
+lb_weights: {C1: 0.5, C2: 0.35, C3: 0.15}   # same placeholder as exp_001–004; see docs/decisions.md
+sanity:
+  n_molecules: 20
+  regimes: [C1, C2]
+  ref_dir: cache/v27_ref          # notebook-run inputs/outputs (gitignored)
+  notebook: reference/casmi-four-channel-v27.ipynb
+kaggle: {train: auto, pool: auto}

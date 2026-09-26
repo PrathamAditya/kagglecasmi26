@@ -1,0 +1,1700 @@
+=== GIT LOG ===
+2026-09-26 6695afe Hello
+2026-09-25 fa4b7ad Training ranker for C2 locally.
+2026-09-25 395c967 exp_016: A2 shared paired-bootstrap comparison (harness.compare) + tests
+2026-09-25 d51e63e exp_016: harness logs git hash captured at run start
+2026-09-25 3317167 exp_016: A1 V27 port + notebook-reference sanity check (C1/C2 20/20 identical top-25)
+2026-09-25 67337d9 exp_016 setup: V27 reference + artifacts paths
+2026-09-25 6b7e4c7 Some changes
+2026-09-25 0e8a5e9 add plan + implementer rules
+2026-09-24 a151622 exp 2 added
+2026-09-24 db713ab Remove unnecessary cat command from card.md
+2026-09-24 4b3ff6f Update card.md
+2026-09-24 dbf456d Fix numbering in 'How to run' section
+2026-09-24 1b961f4 Fix formatting in card.md for run commands
+2026-09-24 306a0aa exp_001: results + card update
+2026-09-24 e6a225c exp_000 baseline + exp_001 harness
+
+=== OLD exp_005 LOG ===
+### v27_patched — reference submission
+
+- file: reference/v27_patched_0334.ipynb
+- change vs V27 (0.320): ppm self-calibration, absolute mass floor, pooled frag workers, tautomer-key cache
+- public LB: 0.334 (Δ +0.014 vs 0.320 — within LB noise, not proof the patches help)
+- role: anchor for Phase A
+
+=== CONFIGS ===
+--- configs/exp_000.yaml
+exp_id: exp_000
+code: casmi_spectral_retrieval_cpu.py
+library:
+  match_key: raw_precursor_mz      # not neutral mass
+  precursor_tol: {abs_da: 0.01, ppm: 20}
+  max_candidates_per_spectrum: 256 # truncated by mass distance
+  similarity: greedy_cosine
+  fragment_tol_da: 0.01
+  intensity_transform: none
+  cleaning: none
+  aggregate_over_spectra: max
+pool:
+  tol: {abs_da: 0.01, ppm: 20}
+  sort: [in_train desc, in_coconut desc, adduct_shift_rank, mass_error]
+ranking:
+  strong_score: 0.20
+  max_spectral_guesses: 12
+  max_guesses: 25
+  dedup_key: smiles
+result: {public_lb: 0.127}
+--- configs/exp_001.yaml
+exp_id: exp_001
+description: Validation harness; exp_000 re-scored with loss decomposition
+predictor:
+  name: exp000
+  params: {check_legacy: 5}      # assert the port matches the original script on the first 5 molecules
+paths:
+  train: /home/amoeba/Desktop/enveda-CASMI26-molecule-id-mass-spectra/train.parquet
+  pool: /home/amoeba/Desktop/enveda-CASMI26-molecule-id-mass-spectra/pool.parquet   # adjust if elsewhere
+  val_dir: data/val
+  cache_dir: cache
+  out_dir: experiments/exp_001_val_harness/results
+val:
+  lib: enveda-np-examples
+  max_precursor_ppm: 20          # mimic "precursor inconsistent with structure → dropped"
+  min_base_peak: 1000            # mimic test cleaning
+diag: {ppm: 20.0, min_da: 0.01}  # reachability windows (matches exp_000 tolerance)
+regimes: [C1, C2, C3]
+lb_weights: {C1: 0.5, C2: 0.35, C3: 0.15}   # placeholder; refit from LB submissions
+kaggle: {train: auto, pool: auto}
+--- configs/exp_002.yaml
+exp_id: exp_002
+description: Candidate-generation correctness — neutral-mass library match, 10 ppm, structure-level cap, metric-ik14 dedup
+predictor:
+  name: exp002
+  params:
+    ppm: 10.0                  # val p99 = 6.6 ppm
+    min_da: 0.005
+    fragment_tol: 0.01
+    max_structures: 400        # cap counts STRUCTURES, not spectra
+    spectra_per_structure: 30
+    cross_adduct_penalty: 0.7
+    strong_score: 0.20
+    max_library_guesses: 12
+    cache_dir: cache
+paths:
+  train: /home/amoeba/Desktop/enveda-CASMI26-molecule-id-mass-spectra/train.parquet
+  pool: /home/amoeba/Desktop/enveda-CASMI26-molecule-id-mass-spectra/pool.parquet   # adjust if elsewhere
+  val_dir: data/val
+  cache_dir: cache
+  out_dir: experiments/exp_002_correctness/results
+diag: {ppm: 10.0, min_da: 0.005}   # reachability windows must match the predictor
+val:
+  lib: enveda-np-examples
+  max_precursor_ppm: 20          # mimic "precursor inconsistent with structure → dropped"
+  min_base_peak: 1000            # mimic test cleaning
+regimes: [C1, C2, C3]
+lb_weights: {C1: 0.5, C2: 0.35, C3: 0.15}   # placeholder; refit from LB submissions
+kaggle: {train: auto, pool: auto}
+--- configs/exp_003.yaml
+exp_id: exp_003
+description: Zero-cap entropy search + analog channel for pool ranking (replaces per-structure cap tuning)
+predictor:
+  name: exp003
+  params:
+    ppm: 10.0
+    min_da: 0.005
+    ppm_offset: 0.0       # try 1.4 after a first run — v27 found a systematic timsTOF offset
+    fragment_tol: 0.01
+    int_floor: 0.002
+    max_peaks: 256
+    ent_weight: true
+    analog_win_da: 200.0
+    strong_score: 0.20
+    max_library_guesses: 12
+    max_pool_ranked: 25
+    cache_dir: cache
+paths:
+  train: /home/amoeba/Desktop/enveda-CASMI26-molecule-id-mass-spectra/train.parquet
+  pool: /home/amoeba/Desktop/enveda-CASMI26-molecule-id-mass-spectra/pool.parquet   # adjust if elsewhere
+  val_dir: data/val
+  cache_dir: cache
+  out_dir: experiments/exp_003_entropy_search/results
+diag: {ppm: 10.0, min_da: 0.005}   # reachability windows must match the predictor
+val:
+  lib: enveda-np-examples
+  max_precursor_ppm: 20          # mimic "precursor inconsistent with structure → dropped"
+  min_base_peak: 1000            # mimic test cleaning
+regimes: [C1, C2, C3]
+lb_weights: {C1: 0.5, C2: 0.35, C3: 0.15}   # placeholder; refit from LB submissions
+kaggle: {train: auto, pool: auto}--- configs/exp_004.yaml
+exp_id: exp_004
+description: Zero-cap entropy search + analog channel for pool ranking (replaces per-structure cap tuning)
+predictor:
+  name: exp004
+  params:
+    ppm: 8.5
+    min_da: 0.005
+    ppm_offset: 1.4
+    fragment_tol: 0.01
+    int_floor: 0.002
+    max_peaks: 256
+    ent_weight: true
+    analog_win_da: 200.0
+    strong_score: 0.20
+    max_library_guesses: 12
+    max_pool_ranked: 25
+    cache_dir: cache
+    ppm_fallback: 30.0
+    n_analog: 100
+    sim_power: 4.0
+    coconut_bonus: 0.02
+paths:
+  train: /home/amoeba/Desktop/enveda-CASMI26-molecule-id-mass-spectra/train.parquet
+  pool: /home/amoeba/Desktop/enveda-CASMI26-molecule-id-mass-spectra/pool.parquet   # adjust if elsewhere
+  val_dir: data/val
+  cache_dir: cache
+  out_dir: experiments/exp_004_entropy_search/results
+diag: {ppm: 10.0, min_da: 0.005}   # reachability windows must match the predictor
+val:
+  lib: enveda-np-examples
+  max_precursor_ppm: 20          # mimic "precursor inconsistent with structure → dropped"
+  min_base_peak: 1000            # mimic test cleaning
+regimes: [C1, C2, C3]
+lb_weights: {C1: 0.5, C2: 0.35, C3: 0.15}   # placeholder; refit from LB submissions
+kaggle: {train: auto, pool: auto}--- configs/exp_016.yaml
+exp_id: exp_016
+description: V27 (patched, public LB 0.334) as-is through the harness — the Phase A anchor
+predictor:
+  name: exp016_v27
+  params:
+    # frozen V27 artifacts (read-only)
+    pool_npz: artifacts/v17_builder/pool_712k_precomputed.npz
+    rankers: artifacts/v17_builder/rankers_v17_ensemble.joblib
+    fp_models: artifacts/fp_models
+    device: cpu                 # Kaggle ran FPNet on a T4; plan.md accepts CPU-vs-GPU tie drift
+    torch_threads: 0            # 0 = torch default
+    # A1: V27 self-calibrates the ppm offset on the file it predicts. Frozen here after one
+    # label-free calibration run (see experiments/exp_016_v27_anchor/card.md).
+    ppm_offset: 1.2840695818908054   # calibrate_ppm_offset(C1 lib, 250 val queries): n=37 pairs, MAD 0.777 ppm
+    # V27 CFG (cell 0) + patch-set CFG (cell 8), verbatim
+    ppm_win: 8.5
+    ppm_fallback: 30.0
+    int_floor: 0.002
+    max_peaks: 256
+    mz_tol: 0.01
+    int_power: 1.0
+    ent_weight: true
+    analog_win: 200.0
+    n_analog: 100
+    sim_power: 4.0
+    topn: 25
+    min_da: 0.0018
+    frag_soft_cap: 34
+    frag_hard_cap: 80
+    max_abs_offset: 5.0
+    use_analog_fallback: false
+    frag_workers: 4
+    nfeat: 31
+    calib_n_sample: 150
+    calib_sim_thresh: 0.90
+    calib_search_ppm: 25.0
+    calib_seed: 0
+    calib_min_pairs: 20
+paths:
+  train: /home/amoeba/Desktop/enveda-CASMI26-molecule-id-mass-spectra/train.parquet
+  pool: /home/amoeba/Desktop/enveda-CASMI26-molecule-id-mass-spectra/pool.parquet
+  val_dir: data/val
+  cache_dir: cache
+  out_dir: experiments/exp_016_v27_anchor/results
+diag: {ppm: 8.5, min_da: 0.0018}   # reachability windows match V27's pool window
+val:
+  lib: enveda-np-examples
+  max_precursor_ppm: 20
+  min_base_peak: 1000
+regimes: [C1, C2, C3]
+lb_weights: {C1: 0.5, C2: 0.35, C3: 0.15}   # same placeholder as exp_001–004; see docs/decisions.md
+sanity:
+  n_molecules: 20
+  regimes: [C1, C2]
+  ref_dir: cache/v27_ref          # notebook-run inputs/outputs (gitignored)
+  notebook: reference/casmi-four-channel-v27.ipynb
+kaggle: {train: auto, pool: auto}
+
+=== CARDS ===
+--- experiments/exp_000_baseline_retrieval/card.md
+# exp_000 — CPU spectral retrieval + pool fallback
+- Owner: Pratham · Date: 2026-09-24 · Code: `casmi_spectral_retrieval_cpu.py` · Config: `configs/exp_000.yaml`
+
+## Method
+1. Per test spectrum: train spectra within max(0.01 Da, 20 ppm) of the raw precursor m/z; keep the 256 nearest by mass.
+2. Greedy cosine, 0.01 Da tolerance, raw normalized intensities. Best score per ik14 across the molecule's spectra.
+3. Ranking: spectral hits with score ≥ 0.20 (max 12) → pool candidates by (in_train, in_coconut, adduct-shift rank, mass error) → remaining spectral hits. Max 25.
+
+## Results
+| metric | value |
+|---|---|
+| public LB | **0.127** |
+| local C1/C2/C3 | not measured (no harness yet) → exp_001 |
+
+## Audit (to verify in exp_001, fix in 002–003)
+1. 256-candidate cap by mass distance drops the true compound (biggest suspect).
+2. Train matched on raw precursor m/z → same-adduct only.
+3. Missing adducts: [M-H2O+H]+, [M-2H2O+H]+, [M-H2O-H]-, [M+CH2O2-H]- → wrong neutral mass for pool lookup.
+4. Pool isomers ranked by mass error → effectively random within a formula.
+5. No cleaning (precursor peak kept, no floor, no intensity transform).
+6. 20 ppm pool tolerance, not measured for timsTOF.
+7. Dedup by SMILES rather than metric ik14.
+8. Cl⁻ offset off by one electron mass.
+
+## Verdict
+Baseline. Superseded once exp_002 lands. Kept runnable for regression checks.
+--- experiments/exp_001_val_harness/card.md
+# exp_001 — Validation harness + exp_000 loss decomposition
+
+- Owner: Pratham · Date: 2026-09-24 · Branch: `exp/001-val-harness` · Parent: exp_000 · Config: `configs/exp_001.yaml`
+
+## Hypothesis
+
+exp_000 loses most of its MRR to candidate generation (truth never scored), not to ranking.
+Falsified if `cand_not_top25` + `hit@2-25` > `reachable_missed` in C1.
+
+**Result:** Partially confirmed. In C1, candidate generation is strong (recall 0.996). But in C2, ranking is the dominant problem: 137 molecules have truth in candidates but ranked below 25.
+
+## Change vs parent
+
+No model change. Adds: frozen val set, C1/C2/C3 regimes, Predictor interface, exp_000 port (verified identical to the original on 5 molecules), Kaggle runner sharing the same code.
+
+### Files added
+
+| file                             | purpose                                                                                    |
+| -------------------------------- | ------------------------------------------------------------------------------------------ |
+| `src/casmi/chem.py`              | All 10 adduct offsets (tested), metric InChIKey14 + tautomer canonicalization + disk cache |
+| `src/casmi/data.py`              | Shared loaders, test schema, path discovery                                                |
+| `src/casmi/predictors/base.py`   | `Predictor` interface (prepare + predict)                                                  |
+| `src/casmi/predictors/exp000.py` | exp_000 wrapped in Predictor interface                                                     |
+| `src/casmi/harness/build_val.py` | Frozen val set from enveda-np-examples (250 molecules, 1183 spectra)                       |
+| `src/casmi/harness/evaluate.py`  | C1/C2/C3 scoring with loss buckets + tautomer-twin exclusion                               |
+| `kaggle/submit.py`               | LB runner using the same Predictor (local = Kaggle, always)                                |
+| `tests/test_chem.py`             | Unit tests: 10 adduct offsets against glucose, metric key stereo invariance                |
+| `configs/exp_001.yaml`           | Config pointing to exp000 predictor                                                        |
+
+## Attacks
+
+Measurement. All classes.
+
+## Success criterion (set before running)
+
+1. Runtime: Completed in ~12.5 min total (269s + 241s + 245s across 3 regimes). Within the < 15 min threshold on the local machine. [PASS]
+2. Artifacts: Loss buckets and 20 worst molecules per regime successfully generated. [PASS]
+3. Data Leakage: leak_hits = 0 confirmed in C2/C3 via tautomer-twin exclusion. [PASS]
+
+## How to run
+
+1. uv run python -m casmi.harness.build_val --config configs/exp_001.yaml
+2. uv run python -m casmi.harness.evaluate --config configs/exp_001.yaml --limit 20 # smoke
+3. uv run python -m casmi.harness.evaluate --config configs/exp_001.yaml # full
+
+## Results (n=250)
+
+| metric                 | C1        | C2        | C3        |
+| ---------------------- | --------- | --------- | --------- |
+| MRR@25                 | **0.859** | **0.038** | **0.000** |
+| Recall@cand            | 0.996     | 0.876     | 0.000     |
+| Recall@25              | 0.976     | 0.328     | 0.000     |
+| hit@1                  | 200       | 2         | 0         |
+| hit@2-25               | 44        | 80        | 0         |
+| cand_not_top25         | 5         | **137**   | 0         |
+| reachable_missed       | 1         | 30        | 0         |
+| unreachable            | 0         | 1         | 250       |
+| crowded windows (>256) | 184       | 156       | 156       |
+| leak_hits              | 0         | 0         | 0         |
+| runtime (s)            | 269       | 241       | 245       |
+
+est. LB (0.5/0.35/0.15): **0.443** vs public LB **0.127** → test set is heavily C2/C3 weighted.
+
+From `build_report.json`: precursor |ppm| p50=1.6 / p95=3.7 / p99=6.6 → exp_002 tolerance = 10 ppm.
+
+## Failure analysis
+
+- **C2 cand_not_top25 = 137** — pool isomers ranked by mass error = effectively random. Audit #4 confirmed. This is the #1 problem.
+- **C2 reachable_missed = 30** — missing adducts ([M-H2O+H]+, [M-2H2O+H]+, [M-H2O-H]-, [M+CH2O2-H]-) and loose tolerance. Audit #3 confirmed.
+- **C1 crowded windows (184/250 > 256)** — yet recall still 0.996, so the 256 cap hurts less than expected for these common compounds. Audit #1 less severe than suspected for C1.
+- **16/250 metric ik14 ≠ raw ik14** — tautomer mismatch confirmed. Twin exclusion fixes it.
+
+## Verdict: keep
+
+Harness is the measurement tool for all future experiments.
+
+## Next
+
+exp_002: fix adducts + 10 ppm tolerance + metric-ik14 dedup → recover 30 reachable_missed.
+Then exp_003: Tanimoto ranker for pool candidates → fix 137 cand_not_top25 (biggest single gain expected).
+EOF
+--- experiments/exp_016_v27_anchor/card.md
+# exp_NNN — <title>
+- Owner: · Date: · Branch: `exp/NNN-slug` · Parent: exp_MMM · Config: `configs/exp_NNN.yaml`
+
+## Hypothesis (one sentence, falsifiable)
+## Change vs parent (the one primary change)
+## Attacks
+Class: C1 / C2 / C3 · Factor: recall / ranking
+
+## Success criterion (written BEFORE running)
+
+## Results
+| metric | parent | this | Δ |
+|---|---|---|---|
+| C1 MRR / Recall@cand / Recall@25 | | | |
+| C2 MRR / Recall@cand / Recall@25 | | | |
+| C3 MRR | | | |
+| est. LB / public LB | | | |
+| Kaggle runtime | | | |
+
+## Failure analysis
+Look at the 20 worst molecules: missing from candidates, or present but ranked low? Why?
+
+## Verdict: keep / discard / inconclusive
+## What this tells us / next
+--- experiments/_TEMPLATE_card.md
+# exp_NNN — <title>
+- Owner: · Date: · Branch: `exp/NNN-slug` · Parent: exp_MMM · Config: `configs/exp_NNN.yaml`
+
+## Hypothesis (one sentence, falsifiable)
+## Change vs parent (the one primary change)
+## Attacks
+Class: C1 / C2 / C3 · Factor: recall / ranking
+
+## Success criterion (written BEFORE running)
+
+## Results
+| metric | parent | this | Δ |
+|---|---|---|---|
+| C1 MRR / Recall@cand / Recall@25 | | | |
+| C2 MRR / Recall@cand / Recall@25 | | | |
+| C3 MRR | | | |
+| est. LB / public LB | | | |
+| Kaggle runtime | | | |
+
+## Failure analysis
+Look at the 20 worst molecules: missing from candidates, or present but ranked low? Why?
+
+## Verdict: keep / discard / inconclusive
+## What this tells us / next
+
+=== RESULTS (small text files only) ===
+--- experiments/exp_001_val_harness/results/C1/summary.json
+{
+  "regime": "C1",
+  "molecules": 250,
+  "mrr": 0.8585,
+  "recall_at_cand": 0.996,
+  "recall_at_25": 0.976,
+  "buckets": {
+    "hit@1": 200,
+    "hit@2-25": 44,
+    "cand_not_top25": 5,
+    "reachable_missed": 1,
+    "unreachable": 0
+  },
+  "oracle_mrr_given_candidates": 0.996,
+  "crowded_windows_gt256": 184,
+  "leak_hits": 0,
+  "runtime_prepare_s": 10.8,
+  "runtime_total_s": 268.8
+}
+--- experiments/exp_001_val_harness/results/C1/worst20.csv
+molecule_id,smiles,adducts,n_spectra,rank,rr,in_candidates,n_candidates,leak,top3,n_ref_truth,ref_truth_same_adduct_in_tol,window_max,truth_in_pool,pool_truth_in_tol,bucket
+v_0090,C=C(C)C1Cc2c(ccc3c2OC2COc4cc(OC)c(OC)cc4C2C3=O)O1,[M+CH2O2-H]-,2,,0.0,False,193,False,COc1cc(C)c2c(OC)cc(=O)oc2c1-c1c(OC)cc(C)c2c(OC)cc(=O)oc12 | CC=C(C)c1cc(OC)c(C)c2c1Oc1c(CO)c(O)cc(C(C)=CC(=O)O)c1C(=O)O2 | COc1ccc(S(=O)(=O)c2c(N)n(CC3CCCO3)c3nc4ccccc4nc23)cc1,256,False,297,True,True,reachable_missed
+v_0183,COc1ccc(-c2oc3cc(O)cc(O)c3c(=O)c2O)cc1,"[M+H]+,[M-H]-",2,,0.0,True,277,False,COc1c(O)cc2c(c1O)C(=O)CC(c1ccc(O)cc1)O2 | COc1c(O)cc2oc(-c3ccc(O)cc3)cc(=O)c2c1O | COc1cc2oc(-c3ccc(O)cc3)cc(=O)c2c(O)c1O,214,True,1895,True,True,cand_not_top25
+v_0212,COc1ccc(-c2oc3cc(OC)cc(O)c3c(=O)c2OC)cc1,"[M+H]+,[M-H2O+H]+",2,,0.0,True,341,False,COc1ccc(-c2cc(=O)c3c(O)c(OC)c(OC)cc3o2)cc1 | COc1ccc(-c2cc(=O)c3ccc(O)cc3o2)cc1OC | COc1ccc(-c2c(C)c3cc(O)ccc3oc2=O)cc1OC,15,True,1821,True,True,cand_not_top25
+v_0078,COc1cc(Cc2cnc(N)nc2N)cc(OC)c1OC,[M+H]+,1,,0.0,True,229,False,O=C(C1CC2CCC1O2)N1CCC(c2n[nH]c(=O)[nH]2)CC1 | Cc1cc(C(=O)N(C)C2COCC2O)c2cnn(C)c2n1 | CCCc1n[nH]c(C2CN(C(=O)c3ccco3)CCO2)n1,198,True,1010,True,True,cand_not_top25
+v_0046,CC(=O)OC1CC(C)C(O)(CCC2=CC(=O)OC2)C2(C)CCCC(C)(C)C12,"[M+CH2O2-H]-,[M+NH4]+,[M+Na]+,[M-H2O+H]+,[M-H]-",5,,0.0,True,418,False,C=CC(C)(O)C1CC2C3(C)CCCC(C)(C)C3C(O)C(O)C2(C)O1 | CC1(CO)C(O)CCC2(C)C1CCC1CC3CC12CCC3(O)CO | CC1(C(O)CO)C=C2CCC3C(C)(CO)CC(O)CC3(C)C2CC1,18,True,277,True,True,cand_not_top25
+v_0015,O=C1c2ccccc2C(=O)c2c(O)c(O)cc(O)c21,[M+H]+,1,,0.0,True,71,False,CC1(C)C(=O)Oc2ccc(OS(C)(=O)=O)cc21 | O=C(O)c1cccc2oc3cccc(O)c3c(=O)c12 | O=C1c2ccccc2C(=O)c2c1cc(O)c(O)c2O,30,True,228,True,True,cand_not_top25
+v_0248,COc1cc2oc(-c3ccccc3)cc(=O)c2c(O)c1O,"[M+H]+,[M-H]-",2,18.0,0.05555555555555555,True,282,False,COc1c(O)cc2oc(-c3ccccc3)cc(=O)c2c1O | COc1cc2c(cc1O)OC(c1ccccc1)C(O)C2=O | COc1c(C=CC(=O)c2ccc(O)cc2)ccc(O)c1O,114,True,2132,True,True,hit@2-25
+v_0154,CC(=O)OC1CCC2(C)C(CCC(C)C23Cc2c(O)cc(CO)c(C=O)c2O3)C1(C)C,[M-H]-,3,15.0,0.06666666666666667,True,185,False,CC(=O)OC1CC2(C)C(CCC(C)C23Cc2c(O)cc(CO)c(C=O)c2O3)C(C)(C)C1O | CC(=O)OC1C(O)CC2(C)C(CCC(C)C23Cc2c(O)cc(CO)c(C=O)c2O3)C1(C)C | CC(C)n1ncc2cnc(Nc3cc(C4CCNC4)nc(N4CCC(F)(F)C4)n3)cc21,2,False,140,True,True,hit@2-25
+v_0118,CN1C2CCCC1CC(NC(=O)c1nn(C)c3ccccc13)C2,[M+H]+,4,13.0,0.07692307692307693,True,256,False,COc1ccc(C2CCN(c3ccnc(N(C)C)n3)CC2)cc1 | OCCCN1CCN(c2ccnc(Cc3ccccc3)n2)CC1 | Cc1cccc2c(N3CCCC(NC(=O)C(C)C)C3)ncnc12,53,True,1252,True,True,hit@2-25
+v_0106,C=C1C(=O)OC2C1CCC(C)C1(O)C=CC(=O)C21C,"[M+H]+,[M+NH4]+,[M-2H2O+H]+,[M-H2O+H]+,[M-H]-",5,11.0,0.09090909090909091,True,425,False,C=C1CC(O)C2C(=C)C(=O)OC2C2C(=C)C(O)CC12 | C=C1C(=O)OC2CC(C)C3CC(=O)C(=O)C3(C)CC12 | C=C1C(=O)OC2CC(C)C3=CC(=O)C(O)C3(C)CC12,2,True,883,True,True,hit@2-25
+v_0230,CC1=C2C(=O)OC(c3ccoc3)C2(C)CCC1,"[M+H]+,[M+Na]+,[M-H2O+H]+",3,10.0,0.1,True,293,False,Nc1nc(N)c2nc(-c3cccc(O)c3)cnc2n1 | Cc1nc2ccc(NC(=O)c3cncnc3)cn2n1 | COC1=CC(=O)OC(CCc2ccccc2)C1,80,True,560,True,True,hit@2-25
+v_0130,CC12C=CC(=O)C=C1CCC1C2C(O)CC2(C)C1CCC2(O)C(=O)CO,"[M+CH2O2-H]-,[M+H]+,[M+K]+,[M+Na]+,[M-2H2O+H]+,[M-H2O+H]+",6,8.0,0.125,True,499,False,CC1CC(=O)C2=C(O1)OC1(C)CCC3C(C)(C)C4OC4C(=O)C3(C)C1C2 | CC12CCC(=O)C=C1CCC1C2C(=O)CC2(C)C1CCC2(O)C(=O)CO | CCC(C)C=C(C)C=CC1=CC2=CC(=O)C3(C)OC(=O)C(C(C)=O)C3C2=CO1,208,True,1497,True,True,hit@2-25
+v_0161,Cc1cc(O)c2c(c1)C(=O)c1cc(O)cc(O)c1C2=O,"[M+H]+,[M-H]-",2,7.0,0.14285714285714285,True,195,False,O=c1c(O)c(-c2ccc(O)cc2)oc2cc(O)ccc12 | O=c1c(-c2ccc(O)cc2)coc2cc(O)cc(O)c12 | O=c1cc(-c2ccc(O)cc2)oc2cc(O)cc(O)c12,236,True,1985,True,True,hit@2-25
+v_0126,COc1c(C)c(O)cc2c1C(=O)c1ccccc1C2=O,"[M+H]+,[M-H]-",2,7.0,0.14285714285714285,True,261,False,COc1ccc(-c2cc3ccc(O)cc3oc2=O)cc1 | COc1ccc2c(c1)OC1c3ccc(OC4OC(COC(=O)CC(=O)O)C(O)C(O)C4O)cc3OCC21 | C=CC(C1=CC(=O)C(OC)=CC1=O)c1ccc(O)cc1,14,True,1247,True,True,hit@2-25
+v_0136,O=c1n(CCCN2CCN(c3cccc(Cl)c3)CC2)nc2ccccn12,"[M+H]+,[M+Na]+",2,7.0,0.1428571428571
+--- experiments/exp_001_val_harness/results/C2/summary.json
+{
+  "regime": "C2",
+  "molecules": 250,
+  "mrr": 0.038,
+  "recall_at_cand": 0.876,
+  "recall_at_25": 0.328,
+  "buckets": {
+    "hit@1": 2,
+    "hit@2-25": 80,
+    "cand_not_top25": 137,
+    "reachable_missed": 30,
+    "unreachable": 1
+  },
+  "oracle_mrr_given_candidates": 0.876,
+  "crowded_windows_gt256": 156,
+  "leak_hits": 0,
+  "runtime_prepare_s": 11.1,
+  "runtime_total_s": 240.6
+}
+--- experiments/exp_001_val_harness/results/C2/worst20.csv
+molecule_id,smiles,adducts,n_spectra,rank,rr,in_candidates,n_candidates,leak,top3,n_ref_truth,ref_truth_same_adduct_in_tol,window_max,truth_in_pool,pool_truth_in_tol,bucket
+v_0066,CC(C)C(N)C(=O)OCCOCn1cnc2c(=O)nc(N)[nH]c21,"[M+H]+,[M+Na]+",2,,0.0,False,363,False,CSCCC(CO)NC(=O)c1c[nH]c2c(C(C)C)cccc2c1=O | Cn1cc(S(=O)(=O)NC(=O)CCCC2CCCC2)c2ccccc21 | C=C1CC23CC1(O)CCC2C12CCC(O)C(C)(C(=O)O1)C2C3C(=O)O,0,False,3271,True,True,reachable_missed
+v_0113,CC(NC(CCc1ccccc1)C(=O)O)C(=O)N1CCCC1C(=O)O,"[M+H]+,[M-H]-",8,,0.0,False,307,False,CCOc1ccccc1C(CC(=O)N1CCCC1C(=O)O)NC(C)=O | CCOc1ccccc1C(CC(=O)N1CCC(C(=O)O)C1)NC(C)=O | Cn1c(-c2ccccc2)c(C(=O)c2ccccc2)c2ccccc21,0,False,2828,True,True,reachable_missed
+v_0071,COc1c(C)c2c(c(O)c1CC=C(C)CCC(=O)O)C(=O)OC2,"[M+H]+,[M-H]-",9,,0.0,False,306,False,CC1CCCC(=O)CCCCCc2cc(O)cc(O)c2C(=O)O1 | O=C(Nc1ccccc1NC(=O)c1ccncc1)c1ccncc1 | O=C1c2ccccc2C(=O)N1CCn1ccc(-c2cccnc2)n1,0,False,2655,True,True,reachable_missed
+v_0177,C=C1CC23CC1CCC2C12C=CC(O)C(C)(C(=O)O1)C2C3C(=O)O,"[M+CH2O2-H]-,[M+NH4]+,[M-H]-",10,,0.0,False,370,False,C=C1CC23CC1CCC2C1=CC2OC(=O)C(C)(C2O)C1C3C(=O)O | COc1ccc(CC2COc3c(C)c(O)c(C)c(O)c3C2=O)cc1 | COc1cccc(Nc2cc(C)c(C#N)c3nc4ccccc4n23)c1,0,False,2563,True,True,reachable_missed
+v_0153,COC1=CC(=O)CC(C)C12Oc1cc(OC)cc(OC)c1C2=O,[M+H]+,5,,0.0,False,274,False,CC(CC1CC=CC(=O)O1)OC(=O)CCc1ccc(O)c(O)c1 | CC(=O)OC1C2OC2C2=CC(=O)C3(CC2(C)C1C)OC3(C)C=O | O=C(Nc1ccccc1NC(=O)c1ccncc1)c1ccncc1,0,False,2486,True,True,reachable_missed
+v_0035,OCC1OC(OC2(CO)OC(CO)C(O)C2O)C(O)C(O)C1O,[M-H]-,1,,0.0,False,270,False,OCC1OC(OC2OC(CO)C(O)C(O)C2O)C(O)C(O)C1O | OCC1OC(OC2C(CO)OC(O)C(O)C2O)C(O)C(O)C1O | OCC1OC(OC2C(O)C(O)COC2(O)CO)C(O)C(O)C1O,0,False,2321,True,True,reachable_missed
+v_0187,COc1ccc2nc([S+]([O-])Cc3ncc(C)c(OC)c3C)[nH]c2c1,"[M+H]+,[M-H]-",2,,0.0,False,296,False,NS(=O)(=O)c1ccc(NC(=O)CN2CCc3ccccc3C2)cc1 | CCOP(=S)(NC(C)C)Oc1ccccc1C(=O)OC(C)C | Cc1nc(C(=O)Nc2ccccc2C(=O)O)cc2c1[nH]c1ccccc12,0,False,2079,True,True,reachable_missed
+v_0248,COc1cc2oc(-c3ccccc3)cc(=O)c2c(O)c1O,"[M+H]+,[M-H]-",2,,0.0,False,282,False,COc1c(O)cc2oc(-c3ccccc3)cc(=O)c2c1O | COc1cc2c(cc1O)OC(c1ccccc1)C(O)C2=O | COc1c(C=CC(=O)c2ccc(O)cc2)ccc(O)c1O,0,False,2057,True,True,reachable_missed
+v_0185,CN1C2CC(OC(=O)C(CO)c3ccccc3)CC1C1OC12,[M+H]+,5,,0.0,False,263,False,O=C(O)CCN(CC1CCCO1)C(=O)C1Cc2ccccc21 | COCC1(C(=O)O)CCCN(C(=O)C2Cc3ccccc32)C1 | CC(CN(C(=O)c1ccc2c(c1)CCOC2)C1CC1)C(=O)O,0,False,2000,True,True,reachable_missed
+v_0028,COc1ccc(C2CC(=O)c3c(O)cc(OC)cc3O2)cc1,"[M+H]+,[M-H]-",7,,0.0,False,312,False,COc1cc(O)c(C(=O)C=Cc2ccc(O)cc2)c(OC)c1 | COc1cc(OC)c2c(c1)OC(c1ccc(O)cc1)CC2=O | Cc1c(O)c(C)c2c(c1O)C(=O)CC(c1ccc(O)cc1)O2,0,False,1954,True,True,reachable_missed
+v_0225,COc1ccc(Cc2nccc3cc(OC)c(OC)cc23)cc1OC,[M+H]+,4,,0.0,False,279,False,CC12CCC3C1C=C1C(=O)c4ccccc4C(=O)C1(O2)C3(C)C=O | COc1cc2c(cc1OC)C1Cc3ccc4c(c3CN1CC2)OCO4 | CCOC(=O)COc1cccc2c1CCN(Cc1ccccc1)C2=O,0,False,1824,True,True,reachable_missed
+v_0212,COc1ccc(-c2oc3cc(OC)cc(O)c3c(=O)c2OC)cc1,"[M+H]+,[M-H2O+H]+",2,,0.0,False,340,False,COc1ccc(-c2cc(=O)c3c(O)c(OC)c(OC)cc3o2)cc1 | COc1ccc(-c2cc(=O)c3ccc(O)cc3o2)cc1OC | COc1ccc(-c2c(C)c3cc(O)ccc3oc2=O)cc1OC,0,False,1809,True,True,reachable_missed
+v_0203,CNC(=C[N+](=O)[O-])NCCSCc1ccc(CN(C)C)o1,[M+H]+,1,,0.0,False,265,False,Cc1nc(S(=O)(=O)NCCC(=O)NCC2CCC2)cn1C | CCN1C(=O)CCC(CNS(C)(=O)=O)C1c1nccn1C | O=c1oc2ccccc2c2c1nnn2CCCN1CCOCC1,0,False,1796,True,True,reachable_missed
+v_0043,CC1CCCC(O)CCCCCc2cc(O)cc(O)c2C(=O)O1,"[M+H]+,[M-H]-",5,,0.0,False,298,False,Cn1c(C2CCCCN2C(=O)c2ccccn2)nc2ccccc21 | c1ccc2oc(C3CCCN(c4ccnc(C5CC5)n4)C3)nc2c1 | CNc1ccc(-c2nc(N3CCOCC3)cc3ccccc23)cn1,0,False,1668,True,True,reachable_missed
+v_0183,COc1ccc(-c2oc3cc(O)cc(O)c3c(=O)c2O)cc1,"[M+H]+,[M-H]-",2,,0.0,False,282,False,COc1c(O)cc2oc(-c3ccc(O)cc3)cc(=O)c2c1O | COc1c(O)cc2occ(-c3ccc(O)cc3)c(=O)c2c1O | COc1cc(-c2[o+]c3cc(O)cc(O)c3cc2O)ccc1O,0,False,1611,True,True,reachable_missed
+v_0130,CC12C=CC(=O)C=C1CCC1C2C(O)CC2(C)C1CCC2(O)C(=O)CO,"[M+CH2O2-H]-,[M+H]+,[M+K]+,[M
+--- experiments/exp_001_val_harness/results/C3/summary.json
+{
+  "regime": "C3",
+  "molecules": 250,
+  "mrr": 0.0,
+  "recall_at_cand": 0.0,
+  "recall_at_25": 0.0,
+  "buckets": {
+    "hit@1": 0,
+    "hit@2-25": 0,
+    "cand_not_top25": 0,
+    "reachable_missed": 0,
+    "unreachable": 250
+  },
+  "oracle_mrr_given_candidates": 0.0,
+  "crowded_windows_gt256": 156,
+  "leak_hits": 0,
+  "runtime_prepare_s": 10.4,
+  "runtime_total_s": 245.2
+}
+--- experiments/exp_001_val_harness/results/C3/worst20.csv
+molecule_id,smiles,adducts,n_spectra,rank,rr,in_candidates,n_candidates,leak,top3,n_ref_truth,ref_truth_same_adduct_in_tol,window_max,truth_in_pool,pool_truth_in_tol,bucket
+v_0066,CC(C)C(N)C(=O)OCCOCn1cnc2c(=O)nc(N)[nH]c21,"[M+H]+,[M+Na]+",2,,0.0,False,363,False,CSCCC(CO)NC(=O)c1c[nH]c2c(C(C)C)cccc2c1=O | Cn1cc(S(=O)(=O)NC(=O)CCCC2CCCC2)c2ccccc21 | C=C1CC23CC1(O)CCC2C12CCC(O)C(C)(C(=O)O1)C2C3C(=O)O,0,False,3271,False,False,unreachable
+v_0113,CC(NC(CCc1ccccc1)C(=O)O)C(=O)N1CCCC1C(=O)O,"[M+H]+,[M-H]-",8,,0.0,False,307,False,CCOc1ccccc1C(CC(=O)N1CCCC1C(=O)O)NC(C)=O | CCOc1ccccc1C(CC(=O)N1CCC(C(=O)O)C1)NC(C)=O | Cn1c(-c2ccccc2)c(C(=O)c2ccccc2)c2ccccc21,0,False,2828,False,False,unreachable
+v_0071,COc1c(C)c2c(c(O)c1CC=C(C)CCC(=O)O)C(=O)OC2,"[M+H]+,[M-H]-",9,,0.0,False,306,False,CC1CCCC(=O)CCCCCc2cc(O)cc(O)c2C(=O)O1 | O=C(Nc1ccccc1NC(=O)c1ccncc1)c1ccncc1 | O=C1c2ccccc2C(=O)N1CCn1ccc(-c2cccnc2)n1,0,False,2655,False,False,unreachable
+v_0177,C=C1CC23CC1CCC2C12C=CC(O)C(C)(C(=O)O1)C2C3C(=O)O,"[M+CH2O2-H]-,[M+NH4]+,[M-H]-",10,,0.0,False,370,False,C=C1CC23CC1CCC2C1=CC2OC(=O)C(C)(C2O)C1C3C(=O)O | COc1ccc(CC2COc3c(C)c(O)c(C)c(O)c3C2=O)cc1 | COc1cccc(Nc2cc(C)c(C#N)c3nc4ccccc4n23)c1,0,False,2563,False,False,unreachable
+v_0153,COC1=CC(=O)CC(C)C12Oc1cc(OC)cc(OC)c1C2=O,[M+H]+,5,,0.0,False,274,False,CC(CC1CC=CC(=O)O1)OC(=O)CCc1ccc(O)c(O)c1 | CC(=O)OC1C2OC2C2=CC(=O)C3(CC2(C)C1C)OC3(C)C=O | O=C(Nc1ccccc1NC(=O)c1ccncc1)c1ccncc1,0,False,2486,False,False,unreachable
+v_0035,OCC1OC(OC2(CO)OC(CO)C(O)C2O)C(O)C(O)C1O,[M-H]-,1,,0.0,False,270,False,OCC1OC(OC2OC(CO)C(O)C(O)C2O)C(O)C(O)C1O | OCC1OC(OC2C(CO)OC(O)C(O)C2O)C(O)C(O)C1O | OCC1OC(OC2C(O)C(O)COC2(O)CO)C(O)C(O)C1O,0,False,2321,False,False,unreachable
+v_0187,COc1ccc2nc([S+]([O-])Cc3ncc(C)c(OC)c3C)[nH]c2c1,"[M+H]+,[M-H]-",2,,0.0,False,296,False,NS(=O)(=O)c1ccc(NC(=O)CN2CCc3ccccc3C2)cc1 | CCOP(=S)(NC(C)C)Oc1ccccc1C(=O)OC(C)C | Cc1nc(C(=O)Nc2ccccc2C(=O)O)cc2c1[nH]c1ccccc12,0,False,2079,False,False,unreachable
+v_0248,COc1cc2oc(-c3ccccc3)cc(=O)c2c(O)c1O,"[M+H]+,[M-H]-",2,,0.0,False,282,False,COc1c(O)cc2oc(-c3ccccc3)cc(=O)c2c1O | COc1cc2c(cc1O)OC(c1ccccc1)C(O)C2=O | COc1c(C=CC(=O)c2ccc(O)cc2)ccc(O)c1O,0,False,2057,False,False,unreachable
+v_0185,CN1C2CC(OC(=O)C(CO)c3ccccc3)CC1C1OC12,[M+H]+,5,,0.0,False,263,False,O=C(O)CCN(CC1CCCO1)C(=O)C1Cc2ccccc21 | COCC1(C(=O)O)CCCN(C(=O)C2Cc3ccccc32)C1 | CC(CN(C(=O)c1ccc2c(c1)CCOC2)C1CC1)C(=O)O,0,False,2000,False,False,unreachable
+v_0028,COc1ccc(C2CC(=O)c3c(O)cc(OC)cc3O2)cc1,"[M+H]+,[M-H]-",7,,0.0,False,312,False,COc1cc(O)c(C(=O)C=Cc2ccc(O)cc2)c(OC)c1 | COc1cc(OC)c2c(c1)OC(c1ccc(O)cc1)CC2=O | Cc1c(O)c(C)c2c(c1O)C(=O)CC(c1ccc(O)cc1)O2,0,False,1954,False,False,unreachable
+v_0225,COc1ccc(Cc2nccc3cc(OC)c(OC)cc23)cc1OC,[M+H]+,4,,0.0,False,279,False,CC12CCC3C1C=C1C(=O)c4ccccc4C(=O)C1(O2)C3(C)C=O | COc1cc2c(cc1OC)C1Cc3ccc4c(c3CN1CC2)OCO4 | CCOC(=O)COc1cccc2c1CCN(Cc1ccccc1)C2=O,0,False,1824,False,False,unreachable
+v_0212,COc1ccc(-c2oc3cc(OC)cc(O)c3c(=O)c2OC)cc1,"[M+H]+,[M-H2O+H]+",2,,0.0,False,340,False,COc1ccc(-c2cc(=O)c3c(O)c(OC)c(OC)cc3o2)cc1 | COc1ccc(-c2cc(=O)c3ccc(O)cc3o2)cc1OC | COc1ccc(-c2c(C)c3cc(O)ccc3oc2=O)cc1OC,0,False,1809,False,False,unreachable
+v_0203,CNC(=C[N+](=O)[O-])NCCSCc1ccc(CN(C)C)o1,[M+H]+,1,,0.0,False,265,False,Cc1nc(S(=O)(=O)NCCC(=O)NCC2CCC2)cn1C | CCN1C(=O)CCC(CNS(C)(=O)=O)C1c1nccn1C | O=c1oc2ccccc2c2c1nnn2CCCN1CCOCC1,0,False,1796,False,False,unreachable
+v_0178,O=c1cc(-c2ccc(O)cc2)oc2c(C3OC(CO)C(O)C(O)C3O)c(O)cc(O)c12,"[M+H]+,[M-H]-",8,,0.0,False,218,False,O=c1c(-c2ccc(O)cc2)coc2c(C3OC(CO)C(O)C(O)C3O)c(O)cc(O)c12 | O=c1cc(-c2ccc(O)cc2)oc2cc(O)c(C3OC(CO)C(O)C(O)C3O)c(O)c12 | CC1OC(Oc2c(-c3ccc(O)cc3)oc3cc(O)cc(O)c3c2=O)C(O)C(O)C1O,0,False,1694,False,False,unreachable
+v_0043,CC1CCCC(O)CCCCCc2cc(O)cc(O)c2C(=O)O1,"[M+H]+,[M-H]-",5,,0.0,False,298,False,Cn1c(C2CCCCN2C(=O)c2ccccn2)nc2ccccc21 | c1ccc2oc(C3CCCN(c4ccnc(C5CC5)n4)C3)nc2c1 | CNc1ccc(-c2nc(N3CCOCC3)cc3ccccc23)cn1,0,False,1668,False,False,unreachable
+v_0137,O=c1cc(-c2ccc(O)c(O)c2)oc2c(C3OC(CO)C(O)C(O)C3O)c(
+--- experiments/exp_001_val_harness/results/results.json
+{
+  "exp_id": "exp_001",
+  "predictor": {
+    "name": "exp000",
+    "params": {
+      "check_legacy": 5
+    }
+  },
+  "limit": 0,
+  "est_lb": 0.4426,
+  "regimes": {
+    "C1": {
+      "regime": "C1",
+      "molecules": 250,
+      "mrr": 0.8585,
+      "recall_at_cand": 0.996,
+      "recall_at_25": 0.976,
+      "buckets": {
+        "hit@1": 200,
+        "hit@2-25": 44,
+        "cand_not_top25": 5,
+        "reachable_missed": 1,
+        "unreachable": 0
+      },
+      "oracle_mrr_given_candidates": 0.996,
+      "crowded_windows_gt256": 184,
+      "leak_hits": 0,
+      "runtime_prepare_s": 10.8,
+      "runtime_total_s": 268.8
+    },
+    "C2": {
+      "regime": "C2",
+      "molecules": 250,
+      "mrr": 0.038,
+      "recall_at_cand": 0.876,
+      "recall_at_25": 0.328,
+      "buckets": {
+        "hit@1": 2,
+        "hit@2-25": 80,
+        "cand_not_top25": 137,
+        "reachable_missed": 30,
+        "unreachable": 1
+      },
+      "oracle_mrr_given_candidates": 0.876,
+      "crowded_windows_gt256": 156,
+      "leak_hits": 0,
+      "runtime_prepare_s": 11.1,
+      "runtime_total_s": 240.6
+    },
+    "C3": {
+      "regime": "C3",
+      "molecules": 250,
+      "mrr": 0.0,
+      "recall_at_cand": 0.0,
+      "recall_at_25": 0.0,
+      "buckets": {
+        "hit@1": 0,
+        "hit@2-25": 0,
+        "cand_not_top25": 0,
+        "reachable_missed": 0,
+        "unreachable": 250
+      },
+      "oracle_mrr_given_candidates": 0.0,
+      "crowded_windows_gt256": 156,
+      "leak_hits": 0,
+      "runtime_prepare_s": 10.4,
+      "runtime_total_s": 245.2
+    }
+  }
+}
+--- experiments/exp_002_correctness/results/C1/summary.json
+{
+  "regime": "C1",
+  "molecules": 250,
+  "mrr": 0.892,
+  "recall_at_cand": 0.996,
+  "recall_at_25": 0.996,
+  "buckets": {
+    "hit@1": 204,
+    "hit@2-25": 45,
+    "cand_not_top25": 0,
+    "reachable_missed": 1,
+    "unreachable": 0
+  },
+  "oracle_mrr_given_candidates": 0.996,
+  "crowded_windows_gt256": 153,
+  "leak_hits": 0,
+  "runtime_prepare_s": 11.0,
+  "runtime_total_s": 457.9
+}
+--- experiments/exp_002_correctness/results/C1/worst20.csv
+molecule_id,smiles,adducts,n_spectra,rank,rr,in_candidates,n_candidates,leak,top3,n_ref_truth,ref_truth_same_adduct_in_tol,window_max,truth_in_pool,pool_truth_in_tol,bucket
+v_0183,COc1ccc(-c2oc3cc(O)cc(O)c3c(=O)c2O)cc1,"[M+H]+,[M-H]-",2,,0.0,False,363,False,COc1ccc(-c2cc(=O)c3c(O)c(O)c(O)cc3o2)cc1 | COc1c(O)cc2oc(-c3ccc(O)cc3)cc(=O)c2c1O | COc1c(O)cc2occ(-c3ccc(O)cc3)c(=O)c2c1O,214,True,1451,True,True,reachable_missed
+v_0212,COc1ccc(-c2oc3cc(OC)cc(O)c3c(=O)c2OC)cc1,"[M+H]+,[M-H2O+H]+",2,21.0,0.047619047619047616,True,593,False,COc1ccc(-c2cc(=O)c3c(O)c(OC)c(OC)cc3o2)cc1 | COc1cc(C=Cc2cc(C=CC(=O)O)cc(O)c2O)ccc1O | Cc1cnc(C=Cc2cc(C(=O)O)c3cnn(C(C)C)c3n2)s1,15,True,893,True,True,hit@2-25
+v_0094,CC1OC(Oc2cc(O)c3c(=O)c(OC4OC(CO)C(O)C(O)C4O)c(-c4ccc(O)cc4)oc3c2)C(O)C(O)C1O,"[M+H]+,[M-H]-",2,6.0,0.16666666666666666,True,208,False,CC1OC(OCC2OC(Oc3c(-c4ccc(O)cc4)oc4cc(O)cc(O)c4c3=O)C(O)C(O)C2O)C(O)C(O)C1O | CC1OC(OC2C(O)C(CO)OC(Oc3c(-c4ccc(O)cc4)oc4cc(O)cc(O)c4c3=O)C2O)C(O)C(O)C1O | CC1OC(Oc2c(-c3ccc(O)cc3)oc3cc(O)cc(O)c3c2=O)C(OC2OC(CO)C(O)C(O)C2O)C(O)C1O,195,True,1379,True,True,hit@2-25
+v_0106,C=C1C(=O)OC2C1CCC(C)C1(O)C=CC(=O)C21C,"[M+H]+,[M+NH4]+,[M-2H2O+H]+,[M-H2O+H]+,[M-H]-",5,6.0,0.16666666666666666,True,433,False,C=C1CC(O)C2C(=C)C(=O)OC2C2C(=C)C(O)CC12 | C=C1C(=O)OC2CC(C)C3CC(=O)C(=O)C3(C)CC12 | C=C1C(=O)OC2C1CCC(C)=C1CCC(=O)OC12C,2,True,712,True,True,hit@2-25
+v_0046,CC(=O)OC1CC(C)C(O)(CCC2=CC(=O)OC2)C2(C)CCCC(C)(C)C12,"[M+CH2O2-H]-,[M+NH4]+,[M+Na]+,[M-H2O+H]+,[M-H]-",5,6.0,0.16666666666666666,True,283,False,CC(=O)OC1C(=O)C(C)=C(CCC(C)CC(=O)O)C2(C)CCCC(C)(C)C12 | CC(=O)OCC1=CCC2C(C)(C)CCCC2(C)C12CCC(C)(CC(=O)O)O2 | CC(=O)OCC1=CC(=O)CC2C1(C)CCC(C)C2(C)CCC(C)CC(=O)O,18,True,235,True,True,hit@2-25
+v_0154,CC(=O)OC1CCC2(C)C(CCC(C)C23Cc2c(O)cc(CO)c(C=O)c2O3)C1(C)C,[M-H]-,3,5.0,0.2,True,156,False,NC(=O)C1CCCN(c2ccc(C(=O)N3CCC(c4cc5ccccc5[nH]4)CC3)cc2)C1 | COc1ccc(C(=O)O[C@H]2CC(C)=CC[C@@]3(C)[C@@H](OC(C)=O)C[C@@](O)(C(C)C)[C@H]23)cc1 | C/C=C(/C)C(=O)O[C@H]1C(C)=C[C@]23C(=O)[C@H](C=C(CO)[C@@H](O)[C@]12O)[C@H]1[C@@H](C[C@H]3C)C1(C)C,2,False,116,True,True,hit@2-25
+v_0151,CC12CCC(O)CC1(O)CCC1C2CCC2(C)C(C3=CC(=O)OC3)CCC12O,[M+H]+,1,4.0,0.25,True,186,False,CC12CCC(O)CC1CCC1C2CC(O)C2(C)C(C3=CC(=O)OC3)CCC12O | CC(=O)OCC(=O)C1CCC2C3CCC4CC(O)CCC4(C)C3C(=O)CC12C | O=C(O)CCCC=CCC1C(O)CC(O)C1CCC(O)CCc1ccccc1,132,True,264,True,True,hit@2-25
+v_0090,C=C(C)C1Cc2c(ccc3c2OC2COc4cc(OC)c(OC)cc4C2C3=O)O1,[M+CH2O2-H]-,2,4.0,0.25,True,168,False,COc1cc2c(cc1OC)C1C(=O)c3ccc4c(c3OC1CO2)C=CC(C)(C)O4 | CC(C)=CCc1c(O)c(O)cc2c(=O)c3c(O)c4c(cc3oc12)OC(C)(C)C=C4 | C=CC(C)(C)c1c2c(c(O)c3c(=O)c4ccc(O)c(O)c4oc13)C=CC(C)(C)O2,256,False,200,True,True,hit@2-25
+v_0015,O=C1c2ccccc2C(=O)c2c(O)c(O)cc(O)c21,[M+H]+,1,4.0,0.25,True,26,False,CC1(C)C(=O)Oc2ccc(OS(C)(=O)=O)cc21 | O=C(O)c1cccc2oc3cccc(O)c3c(=O)c12 | O=C1c2ccccc2C(=O)c2c1cc(O)c(O)c2O,30,True,186,True,True,hit@2-25
+v_0248,COc1cc2oc(-c3ccccc3)cc(=O)c2c(O)c1O,"[M+H]+,[M-H]-",2,3.0,0.3333333333333333,True,280,False,COc1c(O)cc2oc(-c3ccccc3)cc(=O)c2c1O | COc1c(O)cc(O)c2c(=O)cc(-c3ccccc3)oc12 | COc1cc2oc(-c3ccccc3)cc(=O)c2c(O)c1O,114,True,1460,True,True,hit@2-25
+v_0116,COc1ccc(-c2cc(=O)c3c(O)cc(O)cc3o2)cc1O,"[M+H]+,[M-H]-",7,3.0,0.3333333333333333,True,291,False,COc1cc(-c2cc(=O)c3c(O)cc(O)cc3o2)ccc1O | COc1ccc(C=C2Oc3cc(O)cc(O)c3C2=O)cc1O | COc1ccc(-c2cc(=O)c3c(O)cc(O)cc3o2)cc1O,154,True,1389,True,True,hit@2-25
+v_0130,CC12C=CC(=O)C=C1CCC1C2C(O)CC2(C)C1CCC2(O)C(=O)CO,"[M+CH2O2-H]-,[M+H]+,[M+K]+,[M+Na]+,[M-2H2O+H]+,[M-H2O+H]+",6,3.0,0.3333333333333333,True,312,False,CC1CC(=O)C2=C(O1)OC1(C)CCC3C(C)(C)C4OC4C(=O)C3(C)C1C2 | CC12CCC(=O)C=C1CCC1C2C(=O)CC2(C)C1CCC2(O)C(=O)CO | CC12C=CC(=O)C=C1CCC1C2C(O)CC2(C)C1CCC2(O)C(=O)CO,208,True,950,True,True,hit@2-25
+v_0063,COc1ccc(-c2cc(=O)c3c(O)cc(OC4OC(COC5OC(C)C(O)C(O)C5O)C(O)C(O)C4O)cc3o2)cc1O,"[M+H]+,[M-H]-",9,3.0,0.3333333333333333,True,112,False,COc1ccc(-c2oc3cc(OC4OC(C)C(O)C(O)C4O)cc(O)c3c(=O)c2OC2OC(CO)C(O)C(O)C2O)cc1 | COc1cc(-c2cc(=O)c3c(O)cc(OC4OC(CO)C(O)C(O)C4OC4OC(C)C(O)C(O)C4O)cc
+--- experiments/exp_002_correctness/results/C2/summary.json
+{
+  "regime": "C2",
+  "molecules": 250,
+  "mrr": 0.0694,
+  "recall_at_cand": 0.996,
+  "recall_at_25": 0.404,
+  "buckets": {
+    "hit@1": 6,
+    "hit@2-25": 95,
+    "cand_not_top25": 148,
+    "reachable_missed": 0,
+    "unreachable": 1
+  },
+  "oracle_mrr_given_candidates": 0.996,
+  "crowded_windows_gt256": 119,
+  "leak_hits": 0,
+  "runtime_prepare_s": 10.3,
+  "runtime_total_s": 252.5
+}
+--- experiments/exp_002_correctness/results/C2/worst20.csv
+molecule_id,smiles,adducts,n_spectra,rank,rr,in_candidates,n_candidates,leak,top3,n_ref_truth,ref_truth_same_adduct_in_tol,window_max,truth_in_pool,pool_truth_in_tol,bucket
+v_0021,COc1ccc2c(c1)[nH]c1c(C)nccc12,[M+H]+,4,,0.0,False,32,False,O=C(Nc1ccccc1)Nc1ccccc1 | Nc1cccc(C(=O)Nc2ccccc2)c1 | O=C(NCc1ccccc1)c1ccccn1,0,False,87,True,False,unreachable
+v_0066,CC(C)C(N)C(=O)OCCOCn1cnc2c(=O)nc(N)[nH]c21,"[M+H]+,[M+Na]+",2,,0.0,True,703,False,CC=C(C)C(=O)OC1C=C(CO)C(=O)C(OC(C)=O)C1C(C)C | CCC1CN(C(=O)Cc2ccc(CN)cc2)CC(C)S1(=O)=O | Cc1ccccc1C(=O)NC1CCN(C(=O)c2cncnc2)CC1,0,False,1820,True,True,cand_not_top25
+v_0178,O=c1cc(-c2ccc(O)cc2)oc2c(C3OC(CO)C(O)C(O)C3O)c(O)cc(O)c12,"[M+H]+,[M-H]-",8,,0.0,True,166,False,O=c1c(-c2ccc(O)cc2)coc2c(C3OC(CO)C(O)C(O)C3O)c(O)cc(O)c12 | O=c1cc(-c2ccc(O)cc2)oc2cc(O)c(C3OC(CO)C(O)C(O)C3O)c(O)c12 | O=c1c(-c2ccc(O)c(O)c2)coc2c(C3OC(CO)C(O)C(O)C3O)c(O)ccc12,0,False,1561,True,True,cand_not_top25
+v_0071,COc1c(C)c2c(c(O)c1CC=C(C)CCC(=O)O)C(=O)OC2,"[M+H]+,[M-H]-",9,,0.0,True,454,False,O=C(NC1CCCCC1)c1cc(NC(=O)C2CC2)ccc1Cl | CC(=O)OC1C2OC2C2=CC(=O)C3(CC2(C)C1C)OC3(C)C=O | CCCSc1n[nH]c(=O)nc1Nc1ccccc1OC(C)C,0,False,1500,True,True,cand_not_top25
+v_0248,COc1cc2oc(-c3ccccc3)cc(=O)c2c(O)c1O,"[M+H]+,[M-H]-",2,,0.0,True,287,False,COc1c(O)cc2oc(-c3ccccc3)cc(=O)c2c1O | COc1c(O)cc(O)c2c(=O)cc(-c3ccccc3)oc12 | COc1c(-c2ccccc2)oc2cc(O)cc(O)c2c1=O,0,False,1443,True,True,cand_not_top25
+v_0137,O=c1cc(-c2ccc(O)c(O)c2)oc2c(C3OC(CO)C(O)C(O)C3O)c(O)cc(O)c12,"[M+H]+,[M-H]-",7,,0.0,True,168,False,O=c1c(-c2ccc(O)c(O)c2)coc2c(C3OC(CO)C(O)C(O)C3O)c(O)cc(O)c12 | O=c1c(-c2ccc(O)cc2O)coc2c(C3OC(CO)C(O)C(O)C3O)c(O)cc(O)c12 | O=c1cc(-c2ccc(O)c(O)c2)oc2cc(O)c(C3OC(CO)C(O)C(O)C3O)c(O)c12,0,False,1344,True,True,cand_not_top25
+v_0177,C=C1CC23CC1CCC2C12C=CC(O)C(C)(C(=O)O1)C2C3C(=O)O,"[M+CH2O2-H]-,[M+NH4]+,[M-H]-",10,,0.0,True,639,False,C=C1CC23CC1CCC2C1=CC2OC(=O)C(C)(C2O)C1C3C(=O)O | C=C1CC23CC1(O)CCC2C12CC=CC(C)(C(=O)O1)C2C3C(=O)O | CC(C)n1cc(C(=O)NC2CC(=O)N(c3ccccc3F)C2)cn1,0,False,1327,True,True,cand_not_top25
+v_0203,CNC(=C[N+](=O)[O-])NCCSCc1ccc(CN(C)C)o1,[M+H]+,1,,0.0,True,514,False,Cc1nc(S(=O)(=O)NCCC(=O)NCC2CCC2)cn1C | CCN1C(=O)CCC(CNS(C)(=O)=O)C1c1nccn1C | O=c1oc2ccccc2c2c1nnn2CCCN1CCOCC1,0,False,1319,True,True,cand_not_top25
+v_0094,CC1OC(Oc2cc(O)c3c(=O)c(OC4OC(CO)C(O)C(O)C4O)c(-c4ccc(O)cc4)oc3c2)C(O)C(O)C1O,"[M+H]+,[M-H]-",2,,0.0,True,209,False,CC1OC(OC2C(O)C(CO)OC(Oc3c(-c4ccc(O)cc4)oc4cc(O)cc(O)c4c3=O)C2O)C(O)C(O)C1O | CC1OC(OCC2OC(Oc3c(-c4ccc(O)cc4)oc4cc(O)cc(O)c4c3=O)C(O)C(O)C2O)C(O)C(O)C1O | CC1OC(Oc2c(-c3ccc(O)cc3)oc3cc(O)cc(O)c3c2=O)C(OC2OC(CO)C(O)C(O)C2O)C(O)C1O,0,False,1300,True,True,cand_not_top25
+v_0187,COc1ccc2nc([S+]([O-])Cc3ncc(C)c(OC)c3C)[nH]c2c1,"[M+H]+,[M-H]-",2,,0.0,True,455,False,COc1ccc(-c2noc(NCc3ccc(O)c(F)c3)n2)cc1OC | NS(=O)(=O)c1ccc(NC(=O)CN2CCc3ccccc3C2)cc1 | CCOP(=S)(NC(C)C)Oc1ccccc1C(=O)OC(C)C,0,False,1263,True,True,cand_not_top25
+v_0035,OCC1OC(OC2(CO)OC(CO)C(O)C2O)C(O)C(O)C1O,[M-H]-,1,,0.0,True,436,False,OCC1OC(OC2C(O)C(O)COC2(O)CO)C(O)C(O)C1O | OCC1OC(OC2C(O)C(O)C(O)C(O)C2O)C(O)C(O)C1O | OCC1OC(OC2OC(CO)C(O)C(O)C2O)C(O)C(O)C1O,0,False,1228,True,True,cand_not_top25
+v_0031,CCC1=CC2CN3CCc4c([nH]c5ccccc45)C(C(=O)OC)(C2)C13,[M+H]+,5,,0.0,True,223,False,CN(Cc1cc2ccccc2n(C)c1=O)C(CCO)c1ccccc1 | O=C1CCCN1CCC1CN(Cc2cccc(O)c2)c2ccccc21 | CCS(=O)(=O)c1ccc(N2CCC3CCC(C2)N3C(C)C)cc1,0,False,1188,True,True,cand_not_top25
+v_0183,COc1ccc(-c2oc3cc(O)cc(O)c3c(=O)c2O)cc1,"[M+H]+,[M-H]-",2,,0.0,True,365,False,COc1cc(-c2[o+]c3cc(O)cc(O)c3cc2[O-])ccc1O | COc1cc2oc(-c3ccc(O)cc3)cc(=O)c2c(O)c1O | COc1cc(O)c2c(c1)C(=O)c1c(O)c(C)cc(O)c1C2=O,0,False,1170,True,True,cand_not_top25
+v_0225,COc1ccc(Cc2nccc3cc(OC)c(OC)cc23)cc1OC,[M+H]+,4,,0.0,True,315,False,CCC(CC)c1nc2ccccc2c(=Nc2ccc(C)c(Cl)c2)[nH]1 | Cc1ccn(-c2ccc(N3CCOC(c4cccc(F)c4)C3)nn2)n1 | Cc1nccc(C2CCCN(c3ncnc4sc(C)c(C)c34)C2)n1,0,False,1165,True,True,cand_not_top25
+v_0113,CC(NC(CCc1ccccc1)C(=O)O)C(=O)N1CCCC1C(=O)O,"[M+H]+,[M-H]-",8,,0.0,True,234,False,CC(C)(C)C1OCCCC1CNS(=O)(=O)N1CCCC1C
+--- experiments/exp_002_correctness/results/C3/summary.json
+{
+  "regime": "C3",
+  "molecules": 250,
+  "mrr": 0.0,
+  "recall_at_cand": 0.0,
+  "recall_at_25": 0.0,
+  "buckets": {
+    "hit@1": 0,
+    "hit@2-25": 0,
+    "cand_not_top25": 0,
+    "reachable_missed": 0,
+    "unreachable": 250
+  },
+  "oracle_mrr_given_candidates": 0.0,
+  "crowded_windows_gt256": 119,
+  "leak_hits": 0,
+  "runtime_prepare_s": 9.9,
+  "runtime_total_s": 238.8
+}
+--- experiments/exp_002_correctness/results/C3/worst20.csv
+molecule_id,smiles,adducts,n_spectra,rank,rr,in_candidates,n_candidates,leak,top3,n_ref_truth,ref_truth_same_adduct_in_tol,window_max,truth_in_pool,pool_truth_in_tol,bucket
+v_0066,CC(C)C(N)C(=O)OCCOCn1cnc2c(=O)nc(N)[nH]c21,"[M+H]+,[M+Na]+",2,,0.0,False,702,False,CC=C(C)C(=O)OC1C=C(CO)C(=O)C(OC(C)=O)C1C(C)C | CCC1CN(C(=O)Cc2ccc(CN)cc2)CC(C)S1(=O)=O | Cc1ccccc1C(=O)NC1CCN(C(=O)c2cncnc2)CC1,0,False,1820,False,False,unreachable
+v_0178,O=c1cc(-c2ccc(O)cc2)oc2c(C3OC(CO)C(O)C(O)C3O)c(O)cc(O)c12,"[M+H]+,[M-H]-",8,,0.0,False,165,False,O=c1c(-c2ccc(O)cc2)coc2c(C3OC(CO)C(O)C(O)C3O)c(O)cc(O)c12 | O=c1cc(-c2ccc(O)cc2)oc2cc(O)c(C3OC(CO)C(O)C(O)C3O)c(O)c12 | O=c1c(-c2ccc(O)c(O)c2)coc2c(C3OC(CO)C(O)C(O)C3O)c(O)ccc12,0,False,1561,False,False,unreachable
+v_0071,COc1c(C)c2c(c(O)c1CC=C(C)CCC(=O)O)C(=O)OC2,"[M+H]+,[M-H]-",9,,0.0,False,453,False,O=C(NC1CCCCC1)c1cc(NC(=O)C2CC2)ccc1Cl | CC(=O)OC1C2OC2C2=CC(=O)C3(CC2(C)C1C)OC3(C)C=O | CCCSc1n[nH]c(=O)nc1Nc1ccccc1OC(C)C,0,False,1500,False,False,unreachable
+v_0248,COc1cc2oc(-c3ccccc3)cc(=O)c2c(O)c1O,"[M+H]+,[M-H]-",2,,0.0,False,286,False,COc1c(O)cc2oc(-c3ccccc3)cc(=O)c2c1O | COc1c(O)cc(O)c2c(=O)cc(-c3ccccc3)oc12 | COc1c(-c2ccccc2)oc2cc(O)cc(O)c2c1=O,0,False,1443,False,False,unreachable
+v_0137,O=c1cc(-c2ccc(O)c(O)c2)oc2c(C3OC(CO)C(O)C(O)C3O)c(O)cc(O)c12,"[M+H]+,[M-H]-",7,,0.0,False,167,False,O=c1c(-c2ccc(O)c(O)c2)coc2c(C3OC(CO)C(O)C(O)C3O)c(O)cc(O)c12 | O=c1c(-c2ccc(O)cc2O)coc2c(C3OC(CO)C(O)C(O)C3O)c(O)cc(O)c12 | O=c1cc(-c2ccc(O)c(O)c2)oc2cc(O)c(C3OC(CO)C(O)C(O)C3O)c(O)c12,0,False,1344,False,False,unreachable
+v_0177,C=C1CC23CC1CCC2C12C=CC(O)C(C)(C(=O)O1)C2C3C(=O)O,"[M+CH2O2-H]-,[M+NH4]+,[M-H]-",10,,0.0,False,638,False,C=C1CC23CC1CCC2C1=CC2OC(=O)C(C)(C2O)C1C3C(=O)O | C=C1CC23CC1(O)CCC2C12CC=CC(C)(C(=O)O1)C2C3C(=O)O | CC(C)n1cc(C(=O)NC2CC(=O)N(c3ccccc3F)C2)cn1,0,False,1327,False,False,unreachable
+v_0203,CNC(=C[N+](=O)[O-])NCCSCc1ccc(CN(C)C)o1,[M+H]+,1,,0.0,False,513,False,Cc1nc(S(=O)(=O)NCCC(=O)NCC2CCC2)cn1C | CCN1C(=O)CCC(CNS(C)(=O)=O)C1c1nccn1C | O=c1oc2ccccc2c2c1nnn2CCCN1CCOCC1,0,False,1319,False,False,unreachable
+v_0094,CC1OC(Oc2cc(O)c3c(=O)c(OC4OC(CO)C(O)C(O)C4O)c(-c4ccc(O)cc4)oc3c2)C(O)C(O)C1O,"[M+H]+,[M-H]-",2,,0.0,False,208,False,CC1OC(OC2C(O)C(CO)OC(Oc3c(-c4ccc(O)cc4)oc4cc(O)cc(O)c4c3=O)C2O)C(O)C(O)C1O | CC1OC(OCC2OC(Oc3c(-c4ccc(O)cc4)oc4cc(O)cc(O)c4c3=O)C(O)C(O)C2O)C(O)C(O)C1O | CC1OC(Oc2c(-c3ccc(O)cc3)oc3cc(O)cc(O)c3c2=O)C(OC2OC(CO)C(O)C(O)C2O)C(O)C1O,0,False,1300,False,False,unreachable
+v_0187,COc1ccc2nc([S+]([O-])Cc3ncc(C)c(OC)c3C)[nH]c2c1,"[M+H]+,[M-H]-",2,,0.0,False,454,False,COc1ccc(-c2noc(NCc3ccc(O)c(F)c3)n2)cc1OC | NS(=O)(=O)c1ccc(NC(=O)CN2CCc3ccccc3C2)cc1 | CCOP(=S)(NC(C)C)Oc1ccccc1C(=O)OC(C)C,0,False,1263,False,False,unreachable
+v_0035,OCC1OC(OC2(CO)OC(CO)C(O)C2O)C(O)C(O)C1O,[M-H]-,1,,0.0,False,435,False,OCC1OC(OC2C(O)C(O)COC2(O)CO)C(O)C(O)C1O | OCC1OC(OC2C(O)C(O)C(O)C(O)C2O)C(O)C(O)C1O | OCC1OC(OC2OC(CO)C(O)C(O)C2O)C(O)C(O)C1O,0,False,1228,False,False,unreachable
+v_0031,CCC1=CC2CN3CCc4c([nH]c5ccccc45)C(C(=O)OC)(C2)C13,[M+H]+,5,,0.0,False,222,False,CN(Cc1cc2ccccc2n(C)c1=O)C(CCO)c1ccccc1 | O=C1CCCN1CCC1CN(Cc2cccc(O)c2)c2ccccc21 | CCS(=O)(=O)c1ccc(N2CCC3CCC(C2)N3C(C)C)cc1,0,False,1188,False,False,unreachable
+v_0183,COc1ccc(-c2oc3cc(O)cc(O)c3c(=O)c2O)cc1,"[M+H]+,[M-H]-",2,,0.0,False,363,False,COc1cc(-c2[o+]c3cc(O)cc(O)c3cc2[O-])ccc1O | COc1cc2oc(-c3ccc(O)cc3)cc(=O)c2c(O)c1O | COc1cc(O)c2c(c1)C(=O)c1c(O)c(C)cc(O)c1C2=O,0,False,1170,False,False,unreachable
+v_0225,COc1ccc(Cc2nccc3cc(OC)c(OC)cc23)cc1OC,[M+H]+,4,,0.0,False,314,False,CCC(CC)c1nc2ccccc2c(=Nc2ccc(C)c(Cl)c2)[nH]1 | Cc1ccn(-c2ccc(N3CCOC(c4cccc(F)c4)C3)nn2)n1 | Cc1nccc(C2CCCN(c3ncnc4sc(C)c(C)c34)C2)n1,0,False,1165,False,False,unreachable
+v_0113,CC(NC(CCc1ccccc1)C(=O)O)C(=O)N1CCCC1C(=O)O,"[M+H]+,[M-H]-",8,,0.0,False,233,False,CC(C)(C)C1OCCCC1CNS(=O)(=O)N1CCCC1C(=O)O | CCOc1ccccc1C(CC(=O)N1CCCC1C(=O)O)NC(C)=O | OC1C2CC3CN(c4ncnc5c4nnn5Cc4ccccc4)C1C3C2,0,False,1117,False,False,unreachable
+v_0185,CN1C2CC(OC(=O)C(CO)c3ccccc3)CC1C1OC12,[M+
+--- experiments/exp_002_correctness/results/results.json
+{
+  "exp_id": "exp_002",
+  "predictor": {
+    "name": "exp002",
+    "params": {
+      "ppm": 10.0,
+      "min_da": 0.005,
+      "fragment_tol": 0.01,
+      "max_structures": 400,
+      "spectra_per_structure": 30,
+      "cross_adduct_penalty": 0.7,
+      "strong_score": 0.2,
+      "max_library_guesses": 12,
+      "cache_dir": "cache"
+    }
+  },
+  "limit": 0,
+  "est_lb": 0.892,
+  "regimes": {
+    "C1": {
+      "regime": "C1",
+      "molecules": 250,
+      "mrr": 0.892,
+      "recall_at_cand": 0.996,
+      "recall_at_25": 0.996,
+      "buckets": {
+        "hit@1": 204,
+        "hit@2-25": 45,
+        "cand_not_top25": 0,
+        "reachable_missed": 1,
+        "unreachable": 0
+      },
+      "oracle_mrr_given_candidates": 0.996,
+      "crowded_windows_gt256": 153,
+      "leak_hits": 0,
+      "runtime_prepare_s": 11.0,
+      "runtime_total_s": 457.9
+    }
+  }
+}
+--- experiments/exp_003_entropy_search/results/C1/per_molecule.csv
+molecule_id,smiles,adducts,n_spectra,rank,rr,in_candidates,n_candidates,leak,top3,n_ref_truth,ref_truth_same_adduct_in_tol,window_max,truth_in_pool,pool_truth_in_tol,bucket
+v_0000,O=C(O)C1(O)CC(O)C(O)C(O)C1,[M-H]-,1,1.0,1.0,True,19,False,O=C(O)C1(O)CC(O)C(O)C(O)C1 | Cn1c(=O)c2nccnc2n(C)c1=O | Cn1ccc(-n2cnc(C(=O)O)c2)n1,223,True,141,True,True,hit@1
+v_0001,CC(C)(O)C1OC2CCC3(C)C(O)(CCC4Cc5c([nH]c6ccccc56)C43C)C2=CC1=O,"[M+Cl]-,[M+H]+,[M-H]-",12,4.0,0.25,True,30,False,CCC=CCC=CCC=CCC=CCC=CCC=CCCC(=O)NCCS(=O)(=O)O | COc1cc(OC)c2c(c1-c1c(C)cc(OC)c3c(OC)cccc13)CC(C)N(C)C2C | Cc1cc(-c2ccnc(Nc3cnn(C)c3)n2)ccc1CNC(=O)N1CC(OC(C)C)C1,101,True,73,True,True,hit@2-25
+v_0002,CCCCC(=O)N(Cc1ccc(-c2ccccc2-c2nn[nH]n2)cc1)C(C(=O)O)C(C)C,"[M+H]+,[M+K]+,[M+Na]+,[M-H2O+H]+,[M-H]-",5,1.0,1.0,True,36,False,CCCCC(=O)N(Cc1ccc(-c2ccccc2-c2nn[nH]n2)cc1)C(C(=O)O)C(C)C | CCc1ccc2occ(C(=O)NC3CCCN(c4cc(N5CCOCC5)ncn4)C3)c2c1 | Cc1nn(C(C)(C)C)c2nc(C(C)C)cc(C(=O)Nc3ccc4c(c3)OCC(=O)N4C)c12,342,True,291,True,True,hit@1
+v_0003,COc1cc2c(cc1OC)C(=O)C(CC1CCN(Cc3ccccc3)CC1)C2,[M+H]+,4,1.0,1.0,True,49,False,COc1cc2c(cc1OC)C(=O)C(CC1CCN(Cc3ccccc3)CC1)C2 | CC1(C)Cc2c(cnn2-c2ccccn2)CN(C(=O)CCCc2c[nH]nn2)C1 | CCNC(=O)Nc1c[nH]nc1C1CCCN(c2ncnc3ccc(C)cc23)C1,88,True,211,True,True,hit@1
+v_0004,CCC1OC(=O)C(C)C(OC2CC(C)(OC)C(O)C(C)O2)C(C)C(OC2OC(C)CC(N(C)C)C2O)C(C)(OC)CC(C)C(=O)C(C)C(O)C1(C)O,"[M+CH2O2-H]-,[M+H]+",2,1.0,1.0,True,6,False,CCC1OC(=O)C(C)C(OC2CC(C)(OC)C(O)C(C)O2)C(C)C(OC2OC(C)CC(N(C)C)C2O)C(C)(OC)CC(C)C(=O)C(C)C(O)C1(C)O | CCCCC(C)CC(C)C(=O)N(C)C(CC(C)C)C(=O)NC(C(=O)N(C)C(C(=O)N1CC(O)CC1C(=O)N1C(=O)C=CC1C)C(C)C)C(C)OC(C)=O | CCCCC[C@H](O)/C=C/C1=C(\C[C@H](O)CO)[C@H](CCCCCCC(=O)O)N[C@@H]([C@@](C)(O)[C@H](CCCO)c2ccc(O)cc2)CC#Cc2ccccc2CC1,176,True,179,True,True,hit@1
+v_0005,COc1ccc(C2CC(=O)c3c(O)cc(O)cc3O2)cc1O,"[M+H]+,[M-H]-",2,2.0,0.5,True,221,False,COc1cc(C2CC(=O)c3c(O)cc(O)cc3O2)ccc1O | COc1ccc(C2CC(=O)c3c(O)cc(O)cc3O2)cc1O | COc1cc(O)c2c(c1)OC(c1ccc(O)cc1)C(O)C2=O,1301,True,1393,True,True,hit@2-25
+v_0006,CC(=O)OCC(=O)C1(O)CCC2C3CCC4=CC(=O)CCC4(C)C3C(O)CC21C,"[M+CH2O2-H]-,[M+H]+,[M-H]-",10,1.0,1.0,True,162,False,CC(=O)OCC(=O)C1(O)CCC2C3CCC4=CC(=O)CCC4(C)C3C(O)CC21C | CC12CCC3C(CCC4(O)CC(O)CCC34C=O)C1(O)CCC2C1=CC(=O)OC1 | CCCC(CC(=O)O)c1c(OC)c(CC=C(C)C)c(O)c2c1OC(C)C(C)C2=O,134,True,369,True,True,hit@1
+v_0007,CC1C(=O)OC2C(O)C34C5OC(=O)C3(OC3OC(=O)C(O)C34C(C(C)(C)C)C5O)C12O,"[M+NH4]+,[M-H]-",9,1.0,1.0,True,32,False,CC1C(=O)OC2C(O)C34C5OC(=O)C3(OC3OC(=O)C(O)C34C(C(C)(C)C)C5O)C12O | CN1c2ccc(F)cc2N(CCNC(=O)N(c2ccccc2)c2ccccc2)S1(=O)=O | CCc1nn2c(CNS(=O)(=O)Cc3ccc(C)c(C)c3)c(-c3ccccc3)nc2s1,276,True,148,True,True,hit@1
+v_0008,O=c1cccc2n1CC1CNCC2C1,[M+H]+,4,4.0,0.25,True,37,False,COc1ccc2[nH]cc(CCN)c2c1 | CNCCc1c[nH]c2ccc(O)cc12 | CC(N)Cc1c[nH]c2ccc(O)cc12,174,True,227,True,True,hit@2-25
+v_0009,O=C1c2ccc(O)cc2C(=O)c2ccc(O)cc21,[M-H]-,2,3.0,0.3333333333333333,True,21,False,O=C1c2cccc(O)c2C(=O)c2c(O)cccc21 | O=C1c2ccccc2C(=O)c2c1ccc(O)c2O | O=C1c2ccc(O)cc2C(=O)c2ccc(O)cc21,70,True,156,True,True,hit@2-25
+v_0010,Cc1ccccc1N1C(=O)c2cc(S(N)(=O)=O)c(Cl)cc2NC1C,"[M+H]+,[M+Na]+,[M-H]-",8,2.0,0.5,True,22,False,CC1Cc2ccccc2N1NC(=O)c1ccc(Cl)c(S(N)(=O)=O)c1 | Cc1ccccc1N1C(=O)c2cc(S(N)(=O)=O)c(Cl)cc2NC1C | O=C(COc1cc(Cl)ccc1Cl)N1CCOC(c2ccccc2)C1,51,True,277,True,True,hit@2-25
+v_0011,COc1ccc2c3c1OC1CC(O)C=CC31CCN(C)C2,[M+H]+,5,2.0,0.5,True,78,False,C=CCN(Cc1ccccc1F)Cc1nnnn1C1CC1 | COc1ccc2c3c1OC1CC(O)C=CC31CCN(C)C2 | CCc1cccc2c3c([nH]c12)C(CC)(CC(=O)O)OCC3,414,True,986,True,True,hit@2-25
+v_0012,COc1cc2c(c(O)c1OC)c(=O)c1ccccc1n2C,[M+H]+,1,4.0,0.25,True,88,False,CCCN(CCC)S(=O)(=O)c1ccc(C(=O)O)cc1 | O=C(NC1CC(C(=O)O)C1)c1cccc(-c2ccoc2)c1 | COc1cc2c(c(OC)c1O)c(=O)c1ccccc1n2C,169,True,608,True,True,hit@2-25
+v_0013,CCC1CN2CCc3cc(OC)c(OC)cc3C2CC1CC1NCCc2cc(OC)c(OC)cc21,[M+H]+,4,1.0,1.0,True,13,False,CCC1CN2CCc3cc(OC)c(OC)cc3C2CC1CC1NCCc2cc(OC)c(OC)cc21 | CC(C)C(=O)SCCCCCC(N=C(O)OC(C)(C)C)C(O)=NC12CC3CC(CC(C3)C1)C2 | COC(/C=C/C=C/C(=O)N[C@H]1CCCNC(=O)[C@H](C)N(C)C(=O)[C@H](C(C)C)N(C)C1=O)C(C)O,32
+--- experiments/exp_003_entropy_search/results/C1/summary.json
+{
+  "regime": "C1",
+  "molecules": 60,
+  "mrr": 0.7139,
+  "recall_at_cand": 0.9833,
+  "recall_at_25": 0.9833,
+  "buckets": {
+    "hit@1": 34,
+    "hit@2-25": 25,
+    "cand_not_top25": 0,
+    "reachable_missed": 1,
+    "unreachable": 0
+  },
+  "oracle_mrr_given_candidates": 0.9833,
+  "crowded_windows_gt256": 37,
+  "leak_hits": 0,
+  "runtime_prepare_s": 25.3,
+  "runtime_total_s": 338.7
+}
+--- experiments/exp_003_entropy_search/results/C1/worst20.csv
+molecule_id,smiles,adducts,n_spectra,rank,rr,in_candidates,n_candidates,leak,top3,n_ref_truth,ref_truth_same_adduct_in_tol,window_max,truth_in_pool,pool_truth_in_tol,bucket
+v_0028,COc1ccc(C2CC(=O)c3c(O)cc(OC)cc3O2)cc1,"[M+H]+,[M-H]-",7,,0.0,False,225,False,COc1c2ccoc2c(OCC=C(C)C)c2oc(=O)ccc12 | COc1cc(O)c(O)c(OC)c1C(=O)C=Cc1ccccc1 | COc1c(O)cc2ccc3c(OC)c(O)ccc3c2c1OC,120,True,1032,True,True,reachable_missed
+v_0056,CCOC(=O)C(CCc1ccccc1)NC(C)C(=O)N1CCCC1C(=O)O,"[M+H]+,[M+Na]+,[M-H]-",9,8.0,0.125,True,46,False,CC(=O)C1(O)CCC2C3CC(C)=C4CC(=O)C=CC4(C)C3(F)C(O)CC21C | CCC1CN(C)c2ccccc2CN1C(=O)Nc1cccnc1-n1cccn1 | CC1CC2C3CCC4=CC(=O)C=CC4(C)C3(F)C(O)CC2(C)C1C(=O)CO,110,True,576,True,True,hit@2-25
+v_0046,CC(=O)OC1CC(C)C(O)(CCC2=CC(=O)OC2)C2(C)CCCC(C)(C)C12,"[M+CH2O2-H]-,[M+NH4]+,[M+Na]+,[M-H2O+H]+,[M-H]-",5,7.0,0.14285714285714285,True,227,False,CC1=CCC2C(C)(CO)CCCC2(C)C1CC12OC1C(O)C(CO)=CC2O | C=C1C(O)C(O)C2(CC3C(C)=CCC4C(C)(CO)CCCC34C)OC2C1O | C=C1CCC2C(C)(CO)C(OC(=O)C(C)=CC)CCC2(C)C1CCC(=O)O,18,True,235,True,True,hit@2-25
+v_0035,OCC1OC(OC2(CO)OC(CO)C(O)C2O)C(O)C(O)C1O,[M-H]-,1,6.0,0.16666666666666666,True,78,False,OCC1OC(OC2OC(CO)C(O)C(O)C2O)C(O)C(O)C1O | OCC1OC(OC2C(CO)OC(O)(CO)C2O)C(O)C(O)C1O | OCC1OC(OC2C(CO)OC(O)C(O)C2O)C(O)C(O)C1O,184,True,1300,True,True,hit@2-25
+v_0017,CC(CCC(=O)O)C1CCC2C3C(O)CC4CC(O)CCC4(C)C3CC(O)C12C,"[M+CH2O2-H]-,[M+Cl]-,[M+H]+,[M+K]+,[M+NH4]+,[M+Na]+,[M-2H2O+H]+,[M-H2O+H]+",8,5.0,0.2,True,63,False,CC(CCC(=O)O)C1CCC2C3C(O)CC4CC(O)C(O)CC4(C)C3CCC12C | CC(CCC(=O)O)C1CC(O)C2C3C(O)CC4CC(O)CCC4(C)C3CCC12C | CC(CCC(=O)O)C1CCC2C3C(O)CC4C(O)C(O)CCC4(C)C3CCC12C,713,True,658,True,True,hit@2-25
+v_0053,C=CCc1ccc(O)c(-c2ccc(O)c(CC=C)c2)c1,[M-H]-,2,5.0,0.2,True,84,False,C=CCc1ccc(O)c(-c2cc(CC=C)ccc2O)c1 | CC=C(C(=CC)c1ccc(O)cc1)c1ccc(O)cc1 | CC=Cc1ccc2c(c1)C(C)C(c1ccc(O)cc1)O2,343,True,248,True,True,hit@2-25
+v_0012,COc1cc2c(c(O)c1OC)c(=O)c1ccccc1n2C,[M+H]+,1,4.0,0.25,True,88,False,CCCN(CCC)S(=O)(=O)c1ccc(C(=O)O)cc1 | O=C(NC1CC(C(=O)O)C1)c1cccc(-c2ccoc2)c1 | COc1cc2c(c(OC)c1O)c(=O)c1ccccc1n2C,169,True,608,True,True,hit@2-25
+v_0051,O=C(O)C1Cc2c([nH]c3ccccc23)CN1,"[M+H]+,[M-H]-",2,4.0,0.25,True,61,False,COc1ccc2[nH]c3c(c2c1)CCNC3=O | O=C(O)C1NCCc2c1[nH]c1ccccc21 | O=C1Nc2ccccc2C(=O)N2CCCC12,64,True,417,True,True,hit@2-25
+v_0042,O=C(C=Cc1ccc(O)cc1)OCC1OC(Oc2c(-c3ccc(O)cc3)oc3cc(O)cc(O)c3c2=O)C(O)C(O)C1O,"[M+H]+,[M+Na]+,[M-H]-",12,4.0,0.25,True,49,False,Oc1cc(O)c2c(c1)OC(c1ccc(O)c(O)c1)C(OC1(c3ccc(O)c(O)c3)Oc3cc(O)cc(O)c3C(O)C1O)C2 | O=C(C=Cc1ccc(O)cc1)OCC1OC(Oc2ccc3c(=O)cc(-c4ccc(O)c(O)c4)oc3c2O)C(O)C(O)C1O | O=C(C=Cc1ccc(O)cc1)OC1C(Oc2c(-c3ccc(O)cc3)oc3cc(O)cc(O)c3c2=O)OC(CO)C(O)C1O,391,True,275,True,True,hit@2-25
+v_0008,O=c1cccc2n1CC1CNCC2C1,[M+H]+,4,4.0,0.25,True,37,False,COc1ccc2[nH]cc(CCN)c2c1 | CNCCc1c[nH]c2ccc(O)cc12 | CC(N)Cc1c[nH]c2ccc(O)cc12,174,True,227,True,True,hit@2-25
+v_0001,CC(C)(O)C1OC2CCC3(C)C(O)(CCC4Cc5c([nH]c6ccccc56)C43C)C2=CC1=O,"[M+Cl]-,[M+H]+,[M-H]-",12,4.0,0.25,True,30,False,CCC=CCC=CCC=CCC=CCC=CCC=CCCC(=O)NCCS(=O)(=O)O | COc1cc(OC)c2c(c1-c1c(C)cc(OC)c3c(OC)cccc13)CC(C)N(C)C2C | Cc1cc(-c2ccnc(Nc3cnn(C)c3)n2)ccc1CNC(=O)N1CC(OC(C)C)C1,101,True,73,True,True,hit@2-25
+v_0027,CC1(C)CCC2(C(=O)OC3OC(CO)C(O)C(O)C3O)CCC3(C)C(=CCC4C5(C)CC(O)C(O)C(C)(CO)C5CCC43C)C2C1,[M+NH4]+,1,4.0,0.25,True,59,False,CC1(C)CCC2(C(=O)OC3OC(CO)C(O)C(O)C3O)CCC3(C)C(=CCC4C5(C)CC(O)C(O)C(C)(C)C5CCC43C)C2C1O | CC1CCC2(C(=O)OC3OC(CO)C(O)C(O)C3O)CCC3(C)C(=CCC4C5(C)CC(O)C(O)C(C)(C)C5CCC43C)C2C1(C)O | CC1CCC2(C(=O)OC3OC(CO)C(O)C(O)C3O)CCC3(C)C(=CCC4C5(C)CCC(O)C(C)(CO)C5CCC43C)C2C1(C)O,14,True,39,True,True,hit@2-25
+v_0044,O=C(C=Cc1ccc(O)cc1)c1ccc(O)cc1O,"[M+H]+,[M-H]-",9,3.0,0.3333333333333333,True,141,False,O=C1CC(c2ccccc2)Oc2cc(O)cc(O)c21 | Cc1nnc(SCc2ccncc2)c(C#N)c1C | O=C(C=Cc1ccc(O)cc1)c1ccc(O)cc1O,284,True,1511,True,True,hit@2-25
+v_0016,O=c1c(OC2OC(CO)C(O)C2O)c(-c2ccc(O)c(O)c2)oc2cc(O)cc(O)c12,[M-H]-,3,3.0,0.3333333333333333,True,50,False,C=C1CC(OC(=O)C(C)(O)CCl)C2C(=C)C(=O)OC2C2C1CC(O)C2(O)CCl | O=C(O)c1ccccc1OC(=O)c1ccccc1OC1OC(C(=
+--- experiments/exp_003_entropy_search/results/C2/per_molecule.csv
+molecule_id,smiles,adducts,n_spectra,rank,rr,in_candidates,n_candidates,leak,top3,n_ref_truth,ref_truth_same_adduct_in_tol,window_max,truth_in_pool,pool_truth_in_tol,bucket
+v_0000,O=C(O)C1(O)CC(O)C(O)C(O)C1,[M-H]-,1,5.0,0.2,True,19,False,Cn1c(=O)c2nccnc2n(C)c1=O | Cn1ccc(-n2cnc(C(=O)O)c2)n1 | CC1(C(=O)O)CCOC12CC2(F)F,0,False,37,True,True,hit@2-25
+v_0001,CC(C)(O)C1OC2CCC3(C)C(O)(CCC4Cc5c([nH]c6ccccc56)C43C)C2=CC1=O,"[M+Cl]-,[M+H]+,[M-H]-",12,16.0,0.0625,True,30,False,CCC=CCC=CCC=CCC=CCC=CCC=CCCC(=O)NCCS(=O)(=O)O | COc1cc(OC)c2c(c1-c1c(C)cc(OC)c3c(OC)cccc13)CC(C)N(C)C2C | Cc1cc(-c2ccnc(Nc3cnn(C)c3)n2)ccc1CNC(=O)N1CC(OC(C)C)C1,0,False,65,True,True,hit@2-25
+v_0002,CCCCC(=O)N(Cc1ccc(-c2ccccc2-c2nn[nH]n2)cc1)C(C(=O)O)C(C)C,"[M+H]+,[M+K]+,[M+Na]+,[M-H2O+H]+,[M-H]-",5,19.0,0.05263157894736842,True,36,False,CCc1ccc2occ(C(=O)NC3CCCN(c4cc(N5CCOCC5)ncn4)C3)c2c1 | Cc1nn(C(C)(C)C)c2nc(C(C)C)cc(C(=O)Nc3ccc4c(c3)OCC(=O)N4C)c12 | CC(C)(O)c1cc(Nc2cc(Oc3cn(C4CC4)nc3C3CCOCC3)ccn2)ccn1,0,False,156,True,True,hit@2-25
+v_0003,COc1cc2c(cc1OC)C(=O)C(CC1CCN(Cc3ccccc3)CC1)C2,[M+H]+,4,,0.0,True,50,False,CC1(C)Cc2c(cnn2-c2ccccn2)CN(C(=O)CCCc2c[nH]nn2)C1 | CCNC(=O)Nc1c[nH]nc1C1CCCN(c2ncnc3ccc(C)cc23)C1 | Cc1cc(C)n2nc(CC(=O)NC3CCN(Cc4ccccn4)CC3)nc2n1,0,False,139,True,True,cand_not_top25
+v_0004,CCC1OC(=O)C(C)C(OC2CC(C)(OC)C(O)C(C)O2)C(C)C(OC2OC(C)CC(N(C)C)C2O)C(C)(OC)CC(C)C(=O)C(C)C(O)C1(C)O,"[M+CH2O2-H]-,[M+H]+",2,5.0,0.2,True,6,False,CCCCC(C)CC(C)C(=O)N(C)C(CC(C)C)C(=O)NC(C(=O)N(C)C(C(=O)N1CC(O)CC1C(=O)N1C(=O)C=CC1C)C(C)C)C(C)OC(C)=O | CCCCC[C@H](O)/C=C/C1=C(\C[C@H](O)CO)[C@H](CCCCCCC(=O)O)N[C@@H]([C@@](C)(O)[C@H](CCCO)c2ccc(O)cc2)CC#Cc2ccccc2CC1 | COC(=O)CC[C@@H](C(=O)OC)N1Cc2c(O)c(OCC=C(C)CCC=C(C)CCC=C(C)C)c(O)c(CC=C(C)CCC=C(C)CCC=C(C)C)c2C1=O,0,False,25,True,True,hit@2-25
+v_0005,COc1ccc(C2CC(=O)c3c(O)cc(O)cc3O2)cc1O,"[M+H]+,[M-H]-",2,,0.0,True,222,False,COc1cc(C2CC(=O)c3c(O)cc(O)cc3O2)ccc1O | COc1cc(O)c2c(c1)OC(c1ccc(O)cc1)C(O)C2=O | Oc1cc2c(cc1O)C1c3ccc(O)c(O)c3OCC1(O)C2,0,False,1264,True,True,cand_not_top25
+v_0006,CC(=O)OCC(=O)C1(O)CCC2C3CCC4=CC(=O)CCC4(C)C3C(O)CC21C,"[M+CH2O2-H]-,[M+H]+,[M-H]-",10,,0.0,True,163,False,CC12CCC3C(CCC4(O)CC(O)CCC34C=O)C1(O)CCC2C1=CC(=O)OC1 | CCCC(CC(=O)O)c1c(OC)c(CC=C(C)C)c(O)c2c1OC(C)C(C)C2=O | COC(=O)C1=CC=C(C(C)C)CCC2=CCCC(C)(OC2=O)C(OC(C)=O)CC1,0,False,351,True,True,cand_not_top25
+v_0007,CC1C(=O)OC2C(O)C34C5OC(=O)C3(OC3OC(=O)C(O)C34C(C(C)(C)C)C5O)C12O,"[M+NH4]+,[M-H]-",9,20.0,0.05,True,32,False,CN1c2ccc(F)cc2N(CCNC(=O)N(c2ccccc2)c2ccccc2)S1(=O)=O | CCc1nn2c(CNS(=O)(=O)Cc3ccc(C)c(C)c3)c(-c3ccccc3)nc2s1 | CN1C(=O)C(Cc2ccc3ccccc3c2)N=C(c2ccc(O)cc2)c2cc(Cl)ccc21,0,False,127,True,True,hit@2-25
+v_0008,O=c1cccc2n1CC1CNCC2C1,[M+H]+,4,,0.0,True,37,False,COc1ccc2[nH]cc(CCN)c2c1 | CNCCc1c[nH]c2ccc(O)cc12 | CC(N)Cc1c[nH]c2ccc(O)cc12,0,False,141,True,True,cand_not_top25
+v_0009,O=C1c2ccc(O)cc2C(=O)c2ccc(O)cc21,[M-H]-,2,14.0,0.07142857142857142,True,21,False,O=C1c2cccc(O)c2C(=O)c2c(O)cccc21 | O=C1c2ccccc2C(=O)c2c1ccc(O)c2O | O=C1c2ccccc2C(=O)c2c(O)ccc(O)c21,0,False,128,True,True,hit@2-25
+v_0010,Cc1ccccc1N1C(=O)c2cc(S(N)(=O)=O)c(Cl)cc2NC1C,"[M+H]+,[M+Na]+,[M-H]-",8,18.0,0.05555555555555555,True,23,False,CC1Cc2ccccc2N1NC(=O)c1ccc(Cl)c(S(N)(=O)=O)c1 | O=C(COc1cc(Cl)ccc1Cl)N1CCOC(c2ccccc2)C1 | COc1ccccc1-c1cc(NS(=O)(=O)c2cc(F)cc(F)c2)[nH]n1,0,False,243,True,True,hit@2-25
+v_0011,COc1ccc2c3c1OC1CC(O)C=CC31CCN(C)C2,[M+H]+,5,,0.0,True,79,False,C=CCN(Cc1ccccc1F)Cc1nnnn1C1CC1 | CCc1cccc2c3c([nH]c12)C(CC)(CC(=O)O)OCC3 | O=C(C=CCCc1ccc2c(c1)OCO2)N1CCCCC1,0,False,713,True,True,cand_not_top25
+v_0012,COc1cc2c(c(O)c1OC)c(=O)c1ccccc1n2C,[M+H]+,1,,0.0,True,89,False,CCCN(CCC)S(=O)(=O)c1ccc(C(=O)O)cc1 | O=C(NC1CC(C(=O)O)C1)c1cccc(-c2ccoc2)c1 | COc1cc2c(c(OC)c1O)c(=O)c1ccccc1n2C,0,False,520,True,True,cand_not_top25
+v_0013,CCC1CN2CCc3cc(OC)c(OC)cc3C2CC1CC1NCCc2cc(OC)c(OC)cc21,[M+H]+,4,5.0,0.2,True,13,False,CC(C)C(=O)SCCCCCC(N=C(O)OC(C)(C)C)C(O)=NC12CC3CC(CC(C3)C1)C2 | COC(/C=C/C=C/C(=O)N[C@H]1CCCNC(=O)[C@H](C)N(C)C(=O)[C@H](C(C)C)N(C)C1=O)C(C)O | CCc1nc(
+--- experiments/exp_003_entropy_search/results/C2/summary.json
+{
+  "regime": "C2",
+  "molecules": 60,
+  "mrr": 0.0737,
+  "recall_at_cand": 0.9833,
+  "recall_at_25": 0.55,
+  "buckets": {
+    "hit@1": 1,
+    "hit@2-25": 32,
+    "cand_not_top25": 26,
+    "reachable_missed": 0,
+    "unreachable": 1
+  },
+  "oracle_mrr_given_candidates": 0.9833,
+  "crowded_windows_gt256": 28,
+  "leak_hits": 0,
+  "runtime_prepare_s": 26.6,
+  "runtime_total_s": 334.2
+}
+--- experiments/exp_003_entropy_search/results/C2/worst20.csv
+molecule_id,smiles,adducts,n_spectra,rank,rr,in_candidates,n_candidates,leak,top3,n_ref_truth,ref_truth_same_adduct_in_tol,window_max,truth_in_pool,pool_truth_in_tol,bucket
+v_0021,COc1ccc2c(c1)[nH]c1c(C)nccc12,[M+H]+,4,,0.0,False,32,False,Nc1cccc(C(=O)Nc2ccccc2)c1 | O=C(Nc1ccccc1)Nc1ccccc1 | O=C(NCc1ccccc1)c1ccccn1,0,False,87,True,False,unreachable
+v_0052,O=C1CC(c2ccc(O)cc2)Oc2cc(O)cc(O)c21,"[M+H]+,[M+Na]+,[M-H]-",3,,0.0,True,164,False,COc1cc(O)c2c(=O)oc3cc(O)cc(C)c3c2c1 | O=C(C=Cc1ccc(O)cc1)c1c(O)cc(O)cc1O | O=C1C(O)c2c(O)cc(O)cc2OC1c1ccccc1,0,False,1515,True,True,cand_not_top25
+v_0054,O=c1cc(-c2ccccc2)oc2cc(O)c(O)c(O)c12,[M+H]+,3,,0.0,True,119,False,O=c1c(O)c(-c2ccccc2)oc2cc(O)cc(O)c12 | Cc1cc(O)c2c(c1)C(=O)c1cc(O)cc(O)c1C2=O | O=C1C(=Cc2ccc(O)c(O)c2)Oc2cc(O)ccc21,0,False,1515,True,True,cand_not_top25
+v_0044,O=C(C=Cc1ccc(O)cc1)c1ccc(O)cc1O,"[M+H]+,[M-H]-",9,,0.0,True,142,False,O=C1CC(c2ccccc2)Oc2cc(O)cc(O)c21 | Cc1nnc(SCc2ccncc2)c(C#N)c1C | O=C1CC(c2ccc(O)cc2)Oc2cc(O)ccc21,0,False,1443,True,True,cand_not_top25
+v_0005,COc1ccc(C2CC(=O)c3c(O)cc(O)cc3O2)cc1O,"[M+H]+,[M-H]-",2,,0.0,True,222,False,COc1cc(C2CC(=O)c3c(O)cc(O)cc3O2)ccc1O | COc1cc(O)c2c(c1)OC(c1ccc(O)cc1)C(O)C2=O | Oc1cc2c(cc1O)C1c3ccc(O)c(O)c3OCC1(O)C2,0,False,1264,True,True,cand_not_top25
+v_0035,OCC1OC(OC2(CO)OC(CO)C(O)C2O)C(O)C(O)C1O,[M-H]-,1,,0.0,True,79,False,OCC1OC(OC2OC(CO)C(O)C(O)C2O)C(O)C(O)C1O | OCC1OC(OC2C(CO)OC(O)(CO)C2O)C(O)C(O)C1O | OCC1OC(OC2C(CO)OC(O)C(O)C2O)C(O)C(O)C1O,0,False,1228,True,True,cand_not_top25
+v_0031,CCC1=CC2CN3CCc4c([nH]c5ccccc45)C(C(=O)OC)(C2)C13,[M+H]+,5,,0.0,True,88,False,[C-]#[N+]C(C)CC(=O)NCC1CCC(NC(=O)CC(C)[N+]#[C-])C(O)O1 | CCC12C=CCN3CCC4(C(=C(C(=O)OC)C1)Nc1ccccc14)C32 | COC(=O)C1CC23C=CCN4CCC5(c6ccccc6NC15C2C)C43,0,False,1193,True,True,cand_not_top25
+v_0028,COc1ccc(C2CC(=O)c3c(O)cc(OC)cc3O2)cc1,"[M+H]+,[M-H]-",7,,0.0,True,226,False,COc1c2ccoc2c(OCC=C(C)C)c2oc(=O)ccc12 | COc1cc(O)c(O)c(OC)c1C(=O)C=Cc1ccccc1 | COc1c(O)cc2ccc3c(OC)c(O)ccc3c2c1OC,0,False,1027,True,True,cand_not_top25
+v_0019,COC(=O)C1C(O)CCC2CN3CCc4c([nH]c5ccccc45)C3CC21,"[M+CH2O2-H]-,[M+H]+,[M-H]-",12,,0.0,True,151,False,CCC12CCCN3CCc4c(n(c5ccccc45)C(O)(C(=O)OC)C1)C32 | CCC1CN(C)C2Cc3c([nH]c4ccccc34)C(=O)CC1C2C(=O)OC | COC(=O)C1=C2Nc3ccccc3C23CCN2CCC1C(C(C)OC)C23,0,False,926,True,True,cand_not_top25
+v_0011,COc1ccc2c3c1OC1CC(O)C=CC31CCN(C)C2,[M+H]+,5,,0.0,True,79,False,C=CCN(Cc1ccccc1F)Cc1nnnn1C1CC1 | CCc1cccc2c3c([nH]c12)C(CC)(CC(=O)O)OCC3 | O=C(C=CCCc1ccc2c(c1)OCO2)N1CCCCC1,0,False,713,True,True,cand_not_top25
+v_0017,CC(CCC(=O)O)C1CCC2C3C(O)CC4CC(O)CCC4(C)C3CC(O)C12C,"[M+CH2O2-H]-,[M+Cl]-,[M+H]+,[M+K]+,[M+NH4]+,[M+Na]+,[M-2H2O+H]+,[M-H2O+H]+",8,,0.0,True,64,False,CC(CCC(=O)O)C1CCC2C3C(O)CC4CC(O)C(O)CC4(C)C3CCC12C | CC(CCC(=O)O)C1CC(O)C2C3C(O)CC4CC(O)CCC4(C)C3CCC12C | CC(CCC(=O)O)C1CCC2C3C(O)CC4C(O)C(O)CCC4(C)C3CCC12C,0,False,628,True,True,cand_not_top25
+v_0039,COc1ccc(-c2cc(=O)c3c(O)c(OC)c(OC)c(OC)c3o2)cc1OC,"[M+H]+,[M-H]-",2,,0.0,True,140,False,O=C(COc1ccc(Cl)cc1)N1CCN(Cc2ccc3c(c2)OCO3)CC1 | CC=Cc1occ(C(=O)c2c(OC)cc(OC)cc2C(=O)OC)c(=O)c1OC | COc1ccc(-c2cc(=O)c3c(OC)c(OC)c(OC)c(OC)c3o2)cc1O,0,False,609,True,True,cand_not_top25
+v_0012,COc1cc2c(c(O)c1OC)c(=O)c1ccccc1n2C,[M+H]+,1,,0.0,True,89,False,CCCN(CCC)S(=O)(=O)c1ccc(C(=O)O)cc1 | O=C(NC1CC(C(=O)O)C1)c1cccc(-c2ccoc2)c1 | COc1cc2c(c(OC)c1O)c(=O)c1ccccc1n2C,0,False,520,True,True,cand_not_top25
+v_0026,CCC1C2CC3C4N(C)c5ccccc5C45CC(C2C5O)N3C1O,[M+H]+,4,,0.0,True,76,False,CCC1CN2CCC1CC2C(O)c1ccnc2ccc(OC)cc12 | Cc1nc(C2CCCN(c3cc(C(C)C)nc4ncnn34)C2)n[nH]1 | CCC12CCc3[nH]c4c(OC)cccc4c3CCN(CC3OC31)C2,0,False,516,True,True,cand_not_top25
+v_0034,O=C(C=Cc1ccc(O)c(O)c1)OC1CC(O)(C(=O)O)CC(O)C1O,"[M+H]+,[M+K]+,[M+Na]+,[M-H]-",4,,0.0,True,47,False,O=C(C=Cc1ccc(O)c(O)c1)OC1C(O)CC(O)(C(=O)O)CC1O | O=C(C=Cc1ccc(O)c(O)c1)OC1(C(=O)O)CC(O)C(O)C(O)C1 | Cc1cc(=O)c2c(O)cc(OC3OC(CO)C(O)C(O)C3O)cc2o1,0,False,490,True,True,cand_not_top25
+v_0047,Cc1nccn1CC1CCc2c(c3ccccc3n2C)C1=O,[M+H]+,1,,0.0,True,48,False,CC(C)c1cnc(SCC(=O)N(C)C2CC2)n1C1CC1 |
+--- experiments/exp_003_entropy_search/results/C3/per_molecule.csv
+molecule_id,smiles,adducts,n_spectra,rank,rr,in_candidates,n_candidates,leak,top3,n_ref_truth,ref_truth_same_adduct_in_tol,window_max,truth_in_pool,pool_truth_in_tol,bucket
+v_0000,O=C(O)C1(O)CC(O)C(O)C(O)C1,[M-H]-,1,,0.0,False,18,False,Cn1c(=O)c2nccnc2n(C)c1=O | Cn1ccc(-n2cnc(C(=O)O)c2)n1 | CC1(C(=O)O)CCOC12CC2(F)F,0,False,37,False,False,unreachable
+v_0001,CC(C)(O)C1OC2CCC3(C)C(O)(CCC4Cc5c([nH]c6ccccc56)C43C)C2=CC1=O,"[M+Cl]-,[M+H]+,[M-H]-",12,,0.0,False,25,False,CCC=CCC=CCC=CCC=CCC=CCC=CCCC(=O)NCCS(=O)(=O)O | COc1cc(OC)c2c(c1-c1c(C)cc(OC)c3c(OC)cccc13)CC(C)N(C)C2C | Cc1cc(-c2ccnc(Nc3cnn(C)c3)n2)ccc1CNC(=O)N1CC(OC(C)C)C1,0,False,65,False,False,unreachable
+v_0002,CCCCC(=O)N(Cc1ccc(-c2ccccc2-c2nn[nH]n2)cc1)C(C(=O)O)C(C)C,"[M+H]+,[M+K]+,[M+Na]+,[M-H2O+H]+,[M-H]-",5,,0.0,False,25,False,CCc1ccc2occ(C(=O)NC3CCCN(c4cc(N5CCOCC5)ncn4)C3)c2c1 | Cc1nn(C(C)(C)C)c2nc(C(C)C)cc(C(=O)Nc3ccc4c(c3)OCC(=O)N4C)c12 | CC(C)(O)c1cc(Nc2cc(Oc3cn(C4CC4)nc3C3CCOCC3)ccn2)ccn1,0,False,156,False,False,unreachable
+v_0003,COc1cc2c(cc1OC)C(=O)C(CC1CCN(Cc3ccccc3)CC1)C2,[M+H]+,4,,0.0,False,20,False,CC1(C)Cc2c(cnn2-c2ccccn2)CN(C(=O)CCCc2c[nH]nn2)C1 | CCNC(=O)Nc1c[nH]nc1C1CCCN(c2ncnc3ccc(C)cc23)C1 | Cc1cc(C)n2nc(CC(=O)NC3CCN(Cc4ccccn4)CC3)nc2n1,0,False,139,False,False,unreachable
+v_0004,CCC1OC(=O)C(C)C(OC2CC(C)(OC)C(O)C(C)O2)C(C)C(OC2OC(C)CC(N(C)C)C2O)C(C)(OC)CC(C)C(=O)C(C)C(O)C1(C)O,"[M+CH2O2-H]-,[M+H]+",2,,0.0,False,5,False,CCCCC(C)CC(C)C(=O)N(C)C(CC(C)C)C(=O)NC(C(=O)N(C)C(C(=O)N1CC(O)CC1C(=O)N1C(=O)C=CC1C)C(C)C)C(C)OC(C)=O | CCCCC[C@H](O)/C=C/C1=C(\C[C@H](O)CO)[C@H](CCCCCCC(=O)O)N[C@@H]([C@@](C)(O)[C@H](CCCO)c2ccc(O)cc2)CC#Cc2ccccc2CC1 | COC(=O)CC[C@@H](C(=O)OC)N1Cc2c(O)c(OCC=C(C)CCC=C(C)CCC=C(C)C)c(O)c(CC=C(C)CCC=C(C)CCC=C(C)C)c2C1=O,0,False,25,False,False,unreachable
+v_0005,COc1ccc(C2CC(=O)c3c(O)cc(O)cc3O2)cc1O,"[M+H]+,[M-H]-",2,,0.0,False,10,False,COc1cc(C2CC(=O)c3c(O)cc(O)cc3O2)ccc1O | COc1cc(O)c2c(c1)OC(c1ccc(O)cc1)C(O)C2=O | Oc1cc2c(cc1O)C1c3ccc(O)c(O)c3OCC1(O)C2,0,False,1264,False,False,unreachable
+v_0006,CC(=O)OCC(=O)C1(O)CCC2C3CCC4=CC(=O)CCC4(C)C3C(O)CC21C,"[M+CH2O2-H]-,[M+H]+,[M-H]-",10,,0.0,False,11,False,CC12CCC3C(CCC4(O)CC(O)CCC34C=O)C1(O)CCC2C1=CC(=O)OC1 | CCCC(CC(=O)O)c1c(OC)c(CC=C(C)C)c(O)c2c1OC(C)C(C)C2=O | COC(=O)C1=CC=C(C(C)C)CCC2=CCCC(C)(OC2=O)C(OC(C)=O)CC1,0,False,351,False,False,unreachable
+v_0007,CC1C(=O)OC2C(O)C34C5OC(=O)C3(OC3OC(=O)C(O)C34C(C(C)(C)C)C5O)C12O,"[M+NH4]+,[M-H]-",9,,0.0,False,25,False,CN1c2ccc(F)cc2N(CCNC(=O)N(c2ccccc2)c2ccccc2)S1(=O)=O | CCc1nn2c(CNS(=O)(=O)Cc3ccc(C)c(C)c3)c(-c3ccccc3)nc2s1 | CN1C(=O)C(Cc2ccc3ccccc3c2)N=C(c2ccc(O)cc2)c2cc(Cl)ccc21,0,False,127,False,False,unreachable
+v_0008,O=c1cccc2n1CC1CNCC2C1,[M+H]+,4,,0.0,False,25,False,COc1ccc2[nH]cc(CCN)c2c1 | CNCCc1c[nH]c2ccc(O)cc12 | CC(N)Cc1c[nH]c2ccc(O)cc12,0,False,141,False,False,unreachable
+v_0009,O=C1c2ccc(O)cc2C(=O)c2ccc(O)cc21,[M-H]-,2,,0.0,False,20,False,O=C1c2cccc(O)c2C(=O)c2c(O)cccc21 | O=C1c2ccccc2C(=O)c2c1ccc(O)c2O | O=C1c2ccccc2C(=O)c2c(O)ccc(O)c21,0,False,128,False,False,unreachable
+v_0010,Cc1ccccc1N1C(=O)c2cc(S(N)(=O)=O)c(Cl)cc2NC1C,"[M+H]+,[M+Na]+,[M-H]-",8,,0.0,False,18,False,CC1Cc2ccccc2N1NC(=O)c1ccc(Cl)c(S(N)(=O)=O)c1 | O=C(COc1cc(Cl)ccc1Cl)N1CCOC(c2ccccc2)C1 | COc1ccccc1-c1cc(NS(=O)(=O)c2cc(F)cc(F)c2)[nH]n1,0,False,243,False,False,unreachable
+v_0011,COc1ccc2c3c1OC1CC(O)C=CC31CCN(C)C2,[M+H]+,5,,0.0,False,12,False,C=CCN(Cc1ccccc1F)Cc1nnnn1C1CC1 | CCc1cccc2c3c([nH]c12)C(CC)(CC(=O)O)OCC3 | O=C(C=CCCc1ccc2c(c1)OCO2)N1CCCCC1,0,False,713,False,False,unreachable
+v_0012,COc1cc2c(c(O)c1OC)c(=O)c1ccccc1n2C,[M+H]+,1,,0.0,False,12,False,CCCN(CCC)S(=O)(=O)c1ccc(C(=O)O)cc1 | O=C(NC1CC(C(=O)O)C1)c1cccc(-c2ccoc2)c1 | COc1cc2c(c(OC)c1O)c(=O)c1ccccc1n2C,0,False,520,False,False,unreachable
+v_0013,CCC1CN2CCc3cc(OC)c(OC)cc3C2CC1CC1NCCc2cc(OC)c(OC)cc21,[M+H]+,4,,0.0,False,12,False,CC(C)C(=O)SCCCCCC(N=C(O)OC(C)(C)C)C(O)=NC12CC3CC(CC(C3)C1)C2 | COC(/C=C/C=C/C(=O)N[C@H]1CCCNC(=O)[C@H](C)N(C)C(=O)[C@H](C(C)C)N(C)C1=O)C(C)O | CCc1nc(C)cc(NCC(=O)[C@@]2(O)CCC3C4CCC5=CC(=O)CC
+--- experiments/exp_003_entropy_search/results/C3/summary.json
+{
+  "regime": "C3",
+  "molecules": 20,
+  "mrr": 0.0,
+  "recall_at_cand": 0.0,
+  "recall_at_25": 0.0,
+  "buckets": {
+    "hit@1": 0,
+    "hit@2-25": 0,
+    "cand_not_top25": 0,
+    "reachable_missed": 0,
+    "unreachable": 20
+  },
+  "oracle_mrr_given_candidates": 0.0,
+  "crowded_windows_gt256": 7,
+  "leak_hits": 0,
+  "runtime_prepare_s": 29.9,
+  "runtime_total_s": 156.0
+}
+--- experiments/exp_003_entropy_search/results/C3/worst20.csv
+molecule_id,smiles,adducts,n_spectra,rank,rr,in_candidates,n_candidates,leak,top3,n_ref_truth,ref_truth_same_adduct_in_tol,window_max,truth_in_pool,pool_truth_in_tol,bucket
+v_0005,COc1ccc(C2CC(=O)c3c(O)cc(O)cc3O2)cc1O,"[M+H]+,[M-H]-",2,,0.0,False,10,False,COc1cc(C2CC(=O)c3c(O)cc(O)cc3O2)ccc1O | COc1cc(O)c2c(c1)OC(c1ccc(O)cc1)C(O)C2=O | Oc1cc2c(cc1O)C1c3ccc(O)c(O)c3OCC1(O)C2,0,False,1264,False,False,unreachable
+v_0019,COC(=O)C1C(O)CCC2CN3CCc4c([nH]c5ccccc45)C3CC21,"[M+CH2O2-H]-,[M+H]+,[M-H]-",12,,0.0,False,12,False,CCC12CCCN3CCc4c(n(c5ccccc45)C(O)(C(=O)OC)C1)C32 | CCC1CN(C)C2Cc3c([nH]c4ccccc34)C(=O)CC1C2C(=O)OC | COC(=O)C1=C2Nc3ccccc3C23CCN2CCC1C(C(C)OC)C23,0,False,926,False,False,unreachable
+v_0011,COc1ccc2c3c1OC1CC(O)C=CC31CCN(C)C2,[M+H]+,5,,0.0,False,12,False,C=CCN(Cc1ccccc1F)Cc1nnnn1C1CC1 | CCc1cccc2c3c([nH]c12)C(CC)(CC(=O)O)OCC3 | O=C(C=CCCc1ccc2c(c1)OCO2)N1CCCCC1,0,False,713,False,False,unreachable
+v_0017,CC(CCC(=O)O)C1CCC2C3C(O)CC4CC(O)CCC4(C)C3CC(O)C12C,"[M+CH2O2-H]-,[M+Cl]-,[M+H]+,[M+K]+,[M+NH4]+,[M+Na]+,[M-2H2O+H]+,[M-H2O+H]+",8,,0.0,False,20,False,CC(CCC(=O)O)C1CCC2C3C(O)CC4CC(O)C(O)CC4(C)C3CCC12C | CC(CCC(=O)O)C1CC(O)C2C3C(O)CC4CC(O)CCC4(C)C3CCC12C | CC(CCC(=O)O)C1CCC2C3C(O)CC4C(O)C(O)CCC4(C)C3CCC12C,0,False,628,False,False,unreachable
+v_0012,COc1cc2c(c(O)c1OC)c(=O)c1ccccc1n2C,[M+H]+,1,,0.0,False,12,False,CCCN(CCC)S(=O)(=O)c1ccc(C(=O)O)cc1 | O=C(NC1CC(C(=O)O)C1)c1cccc(-c2ccoc2)c1 | COc1cc2c(c(OC)c1O)c(=O)c1ccccc1n2C,0,False,520,False,False,unreachable
+v_0006,CC(=O)OCC(=O)C1(O)CCC2C3CCC4=CC(=O)CCC4(C)C3C(O)CC21C,"[M+CH2O2-H]-,[M+H]+,[M-H]-",10,,0.0,False,11,False,CC12CCC3C(CCC4(O)CC(O)CCC34C=O)C1(O)CCC2C1=CC(=O)OC1 | CCCC(CC(=O)O)c1c(OC)c(CC=C(C)C)c(O)c2c1OC(C)C(C)C2=O | COC(=O)C1=CC=C(C(C)C)CCC2=CCCC(C)(OC2=O)C(OC(C)=O)CC1,0,False,351,False,False,unreachable
+v_0018,OCC1OC(Oc2ccc(O)cc2)C(O)C(O)C1O,[M+CH2O2-H]-,2,,0.0,False,12,False,OCC1OC(Oc2ccccc2O)C(O)C(O)C1O | CCOc1nccnc1N1CCC(S(N)(=O)=O)C1 | CS(=O)(=O)N1CCCC(c2cc(C(N)=O)[nH]n2)C1,0,False,291,False,False,unreachable
+v_0010,Cc1ccccc1N1C(=O)c2cc(S(N)(=O)=O)c(Cl)cc2NC1C,"[M+H]+,[M+Na]+,[M-H]-",8,,0.0,False,18,False,CC1Cc2ccccc2N1NC(=O)c1ccc(Cl)c(S(N)(=O)=O)c1 | O=C(COc1cc(Cl)ccc1Cl)N1CCOC(c2ccccc2)C1 | COc1ccccc1-c1cc(NS(=O)(=O)c2cc(F)cc(F)c2)[nH]n1,0,False,243,False,False,unreachable
+v_0015,O=C1c2ccccc2C(=O)c2c(O)c(O)cc(O)c21,[M+H]+,1,,0.0,False,25,False,O=c1[nH]c(C=Cc2cncs2)nc2cnccc12 | CC1(C)C(=O)Oc2ccc(OS(C)(=O)=O)cc21 | O=C1c2ccccc2C(=O)c2c1cc(O)c(O)c2O,0,False,173,False,False,unreachable
+v_0016,O=c1c(OC2OC(CO)C(O)C2O)c(-c2ccc(O)c(O)c2)oc2cc(O)cc(O)c12,[M-H]-,3,,0.0,False,25,False,C=C1CC(OC(=O)C(C)(O)CCl)C2C(=C)C(=O)OC2C2C1CC(O)C2(O)CCl | O=C(O)c1ccccc1OC(=O)c1ccccc1OC1OC(C(=O)O)C(O)C(O)C1O | O=c1c(OC2OCC(O)C(O)C2O)c(-c2ccc(O)c(O)c2)oc2cc(O)cc(O)c12,0,False,165,False,False,unreachable
+v_0002,CCCCC(=O)N(Cc1ccc(-c2ccccc2-c2nn[nH]n2)cc1)C(C(=O)O)C(C)C,"[M+H]+,[M+K]+,[M+Na]+,[M-H2O+H]+,[M-H]-",5,,0.0,False,25,False,CCc1ccc2occ(C(=O)NC3CCCN(c4cc(N5CCOCC5)ncn4)C3)c2c1 | Cc1nn(C(C)(C)C)c2nc(C(C)C)cc(C(=O)Nc3ccc4c(c3)OCC(=O)N4C)c12 | CC(C)(O)c1cc(Nc2cc(Oc3cn(C4CC4)nc3C3CCOCC3)ccn2)ccn1,0,False,156,False,False,unreachable
+v_0014,CCC(C(=O)C(C)C(O)C(C)CCc1ccc(C)c(O)c1C(=O)O)C1OC(CC)(C2CCC(O)(CC)C(C)O2)CC1C,"[M+H]+,[M+K]+,[M+NH4]+,[M+Na]+,[M-H]-",13,,0.0,False,25,False,CCCCCCCCCCCCCC(=O)OC12CC(C)C3(O)C(C4OC4(CO)C(O)C4(O)C(=O)C(C)=CC43)C1C2(C)C | CC(=O)OC1CC2C(C)(C)C(O)CC(OC(C)=O)C2(C)C2CCC3(C)C(=CCC3C(CO)CC(O)C3OC3(C)C)C12C | CC(=O)OC(C)(C)C/C=C/[C@@H](C)[C@H]1CC[C@H]2[C@@H]3CC=C4C[C@@H](O[C@@H]5OC[C@@H](O)[C@@H](O)[C@@H]5O)CC[C@]4(CO)[C@H]3CC[C@]12C,0,False,147,False,False,unreachable
+v_0008,O=c1cccc2n1CC1CNCC2C1,[M+H]+,4,,0.0,False,25,False,COc1ccc2[nH]cc(CCN)c2c1 | CNCCc1c[nH]c2ccc(O)cc12 | CC(N)Cc1c[nH]c2ccc(O)cc12,0,False,141,False,False,unreachable
+v_0003,COc1cc2c(cc1OC)C(=O)C(CC1CCN(Cc3ccccc3)CC1)C2,[M+H]+,4,,0.0,False,20,False,CC1(C)Cc2c(cnn2-c2ccccn2)CN(C(=O)CCCc2c[nH]nn2)C1 | CCNC(=O)Nc1c[nH]nc1C1CCCN(c2ncnc3ccc(C)cc23)C1 | Cc1cc(C)n2nc(CC(=O)NC3CCN(Cc4ccccn4)CC3)
+--- experiments/exp_003_entropy_search/results/results.json
+{
+  "exp_id": "exp_003",
+  "predictor": {
+    "name": "exp003",
+    "params": {
+      "ppm": 10.0,
+      "min_da": 0.005,
+      "ppm_offset": 0.0,
+      "fragment_tol": 0.01,
+      "int_floor": 0.002,
+      "max_peaks": 256,
+      "ent_weight": true,
+      "analog_win_da": 200.0,
+      "strong_score": 0.2,
+      "max_library_guesses": 12,
+      "max_pool_ranked": 25,
+      "cache_dir": "cache"
+    }
+  },
+  "limit": 60,
+  "est_lb": 0.4503,
+  "regimes": {
+    "C1": {
+      "regime": "C1",
+      "molecules": 60,
+      "mrr": 0.7139,
+      "recall_at_cand": 0.9833,
+      "recall_at_25": 0.9833,
+      "buckets": {
+        "hit@1": 34,
+        "hit@2-25": 25,
+        "cand_not_top25": 0,
+        "reachable_missed": 1,
+        "unreachable": 0
+      },
+      "oracle_mrr_given_candidates": 0.9833,
+      "crowded_windows_gt256": 37,
+      "leak_hits": 0,
+      "runtime_prepare_s": 25.3,
+      "runtime_total_s": 338.7
+    },
+    "C2": {
+      "regime": "C2",
+      "molecules": 60,
+      "mrr": 0.0737,
+      "recall_at_cand": 0.9833,
+      "recall_at_25": 0.55,
+      "buckets": {
+        "hit@1": 1,
+        "hit@2-25": 32,
+        "cand_not_top25": 26,
+        "reachable_missed": 0,
+        "unreachable": 1
+      },
+      "oracle_mrr_given_candidates": 0.9833,
+      "crowded_windows_gt256": 28,
+      "leak_hits": 0,
+      "runtime_prepare_s": 26.6,
+      "runtime_total_s": 334.2
+    }
+  }
+}
+--- experiments/exp_004_entropy_search/results/C1/per_molecule.csv
+molecule_id,smiles,adducts,n_spectra,rank,rr,in_candidates,n_candidates,leak,top3,n_ref_truth,ref_truth_same_adduct_in_tol,window_max,truth_in_pool,pool_truth_in_tol,bucket
+v_0000,O=C(O)C1(O)CC(O)C(O)C(O)C1,[M-H]-,1,1.0,1.0,True,19,False,O=C(O)C1(O)CC(O)C(O)C(O)C1 | Cn1c(=O)c2nccnc2n(C)c1=O | Cn1ccc(-n2cnc(C(=O)O)c2)n1,223,True,141,True,True,hit@1
+v_0001,CC(C)(O)C1OC2CCC3(C)C(O)(CCC4Cc5c([nH]c6ccccc56)C43C)C2=CC1=O,"[M+Cl]-,[M+H]+,[M-H]-",12,4.0,0.25,True,30,False,CCC=CCC=CCC=CCC=CCC=CCC=CCCC(=O)NCCS(=O)(=O)O | COc1cc(OC)c2c(c1-c1c(C)cc(OC)c3c(OC)cccc13)CC(C)N(C)C2C | Cc1cc(-c2ccnc(Nc3cnn(C)c3)n2)ccc1CNC(=O)N1CC(OC(C)C)C1,101,True,73,True,True,hit@2-25
+v_0002,CCCCC(=O)N(Cc1ccc(-c2ccccc2-c2nn[nH]n2)cc1)C(C(=O)O)C(C)C,"[M+H]+,[M+K]+,[M+Na]+,[M-H2O+H]+,[M-H]-",5,1.0,1.0,True,36,False,CCCCC(=O)N(Cc1ccc(-c2ccccc2-c2nn[nH]n2)cc1)C(C(=O)O)C(C)C | CCc1ccc2occ(C(=O)NC3CCCN(c4cc(N5CCOCC5)ncn4)C3)c2c1 | Cc1nn(C(C)(C)C)c2nc(C(C)C)cc(C(=O)Nc3ccc4c(c3)OCC(=O)N4C)c12,342,True,291,True,True,hit@1
+v_0003,COc1cc2c(cc1OC)C(=O)C(CC1CCN(Cc3ccccc3)CC1)C2,[M+H]+,4,1.0,1.0,True,49,False,COc1cc2c(cc1OC)C(=O)C(CC1CCN(Cc3ccccc3)CC1)C2 | CC1(C)Cc2c(cnn2-c2ccccn2)CN(C(=O)CCCc2c[nH]nn2)C1 | CCNC(=O)Nc1c[nH]nc1C1CCCN(c2ncnc3ccc(C)cc23)C1,88,True,211,True,True,hit@1
+v_0004,CCC1OC(=O)C(C)C(OC2CC(C)(OC)C(O)C(C)O2)C(C)C(OC2OC(C)CC(N(C)C)C2O)C(C)(OC)CC(C)C(=O)C(C)C(O)C1(C)O,"[M+CH2O2-H]-,[M+H]+",2,1.0,1.0,True,6,False,CCC1OC(=O)C(C)C(OC2CC(C)(OC)C(O)C(C)O2)C(C)C(OC2OC(C)CC(N(C)C)C2O)C(C)(OC)CC(C)C(=O)C(C)C(O)C1(C)O | CCCCC(C)CC(C)C(=O)N(C)C(CC(C)C)C(=O)NC(C(=O)N(C)C(C(=O)N1CC(O)CC1C(=O)N1C(=O)C=CC1C)C(C)C)C(C)OC(C)=O | CCCCC[C@H](O)/C=C/C1=C(\C[C@H](O)CO)[C@H](CCCCCCC(=O)O)N[C@@H]([C@@](C)(O)[C@H](CCCO)c2ccc(O)cc2)CC#Cc2ccccc2CC1,176,True,179,True,True,hit@1
+v_0005,COc1ccc(C2CC(=O)c3c(O)cc(O)cc3O2)cc1O,"[M+H]+,[M-H]-",2,2.0,0.5,True,221,False,COc1cc(C2CC(=O)c3c(O)cc(O)cc3O2)ccc1O | COc1ccc(C2CC(=O)c3c(O)cc(O)cc3O2)cc1O | COc1cc(O)c2c(c1)OC(c1ccc(O)cc1)C(O)C2=O,1301,True,1393,True,True,hit@2-25
+v_0006,CC(=O)OCC(=O)C1(O)CCC2C3CCC4=CC(=O)CCC4(C)C3C(O)CC21C,"[M+CH2O2-H]-,[M+H]+,[M-H]-",10,1.0,1.0,True,162,False,CC(=O)OCC(=O)C1(O)CCC2C3CCC4=CC(=O)CCC4(C)C3C(O)CC21C | CC12CCC3C(CCC4(O)CC(O)CCC34C=O)C1(O)CCC2C1=CC(=O)OC1 | CCCC(CC(=O)O)c1c(OC)c(CC=C(C)C)c(O)c2c1OC(C)C(C)C2=O,134,True,369,True,True,hit@1
+v_0007,CC1C(=O)OC2C(O)C34C5OC(=O)C3(OC3OC(=O)C(O)C34C(C(C)(C)C)C5O)C12O,"[M+NH4]+,[M-H]-",9,1.0,1.0,True,29,False,CC1C(=O)OC2C(O)C34C5OC(=O)C3(OC3OC(=O)C(O)C34C(C(C)(C)C)C5O)C12O | CN1c2ccc(F)cc2N(CCNC(=O)N(c2ccccc2)c2ccccc2)S1(=O)=O | CCc1nn2c(CNS(=O)(=O)Cc3ccc(C)c(C)c3)c(-c3ccccc3)nc2s1,276,True,148,True,True,hit@1
+v_0008,O=c1cccc2n1CC1CNCC2C1,[M+H]+,4,4.0,0.25,True,37,False,COc1ccc2[nH]cc(CCN)c2c1 | CNCCc1c[nH]c2ccc(O)cc12 | CC(N)Cc1c[nH]c2ccc(O)cc12,174,True,227,True,True,hit@2-25
+v_0009,O=C1c2ccc(O)cc2C(=O)c2ccc(O)cc21,[M-H]-,2,3.0,0.3333333333333333,True,21,False,O=C1c2cccc(O)c2C(=O)c2c(O)cccc21 | O=C1c2ccccc2C(=O)c2c1ccc(O)c2O | O=C1c2ccc(O)cc2C(=O)c2ccc(O)cc21,70,True,156,True,True,hit@2-25
+v_0010,Cc1ccccc1N1C(=O)c2cc(S(N)(=O)=O)c(Cl)cc2NC1C,"[M+H]+,[M+Na]+,[M-H]-",8,2.0,0.5,True,22,False,CC1Cc2ccccc2N1NC(=O)c1ccc(Cl)c(S(N)(=O)=O)c1 | Cc1ccccc1N1C(=O)c2cc(S(N)(=O)=O)c(Cl)cc2NC1C | O=C(COc1cc(Cl)ccc1Cl)N1CCOC(c2ccccc2)C1,51,True,277,True,True,hit@2-25
+v_0011,COc1ccc2c3c1OC1CC(O)C=CC31CCN(C)C2,[M+H]+,5,2.0,0.5,True,78,False,C=CCN(Cc1ccccc1F)Cc1nnnn1C1CC1 | COc1ccc2c3c1OC1CC(O)C=CC31CCN(C)C2 | CCc1cccc2c3c([nH]c12)C(CC)(CC(=O)O)OCC3,414,True,986,True,True,hit@2-25
+v_0012,COc1cc2c(c(O)c1OC)c(=O)c1ccccc1n2C,[M+H]+,1,4.0,0.25,True,87,False,CCCN(CCC)S(=O)(=O)c1ccc(C(=O)O)cc1 | O=C(NC1CC(C(=O)O)C1)c1cccc(-c2ccoc2)c1 | COc1cc2c(c(OC)c1O)c(=O)c1ccccc1n2C,169,True,608,True,True,hit@2-25
+v_0013,CCC1CN2CCc3cc(OC)c(OC)cc3C2CC1CC1NCCc2cc(OC)c(OC)cc21,[M+H]+,4,1.0,1.0,True,12,False,CCC1CN2CCc3cc(OC)c(OC)cc3C2CC1CC1NCCc2cc(OC)c(OC)cc21 | COC(/C=C/C=C/C(=O)N[C@H]1CCCNC(=O)[C@H](C)N(C)C(=O)[C@H](C(C)C)N(C)C1=O)C(C)O | CCc1nc(C)cc(NCC(=O)[C@@]2(O)CCC3C4CCC5=CC(=O)CC[C@]5(C)C4CC[C@@
+--- experiments/exp_004_entropy_search/results/C1/summary.json
+{
+  "regime": "C1",
+  "molecules": 60,
+  "mrr": 0.7174,
+  "recall_at_cand": 0.9833,
+  "recall_at_25": 0.9833,
+  "buckets": {
+    "hit@1": 34,
+    "hit@2-25": 25,
+    "cand_not_top25": 0,
+    "reachable_missed": 1,
+    "unreachable": 0
+  },
+  "oracle_mrr_given_candidates": 0.9833,
+  "crowded_windows_gt256": 37,
+  "leak_hits": 0,
+  "runtime_prepare_s": 25.5,
+  "runtime_total_s": 305.6
+}
+--- experiments/exp_004_entropy_search/results/C1/worst20.csv
+molecule_id,smiles,adducts,n_spectra,rank,rr,in_candidates,n_candidates,leak,top3,n_ref_truth,ref_truth_same_adduct_in_tol,window_max,truth_in_pool,pool_truth_in_tol,bucket
+v_0028,COc1ccc(C2CC(=O)c3c(O)cc(OC)cc3O2)cc1,"[M+H]+,[M-H]-",7,,0.0,False,225,False,COc1c2ccoc2c(OCC=C(C)C)c2oc(=O)ccc12 | COc1cc(O)c(O)c(OC)c1C(=O)C=Cc1ccccc1 | COc1c(O)cc2ccc3c(OC)c(O)ccc3c2c1OC,120,True,1032,True,True,reachable_missed
+v_0046,CC(=O)OC1CC(C)C(O)(CCC2=CC(=O)OC2)C2(C)CCCC(C)(C)C12,"[M+CH2O2-H]-,[M+NH4]+,[M+Na]+,[M-H2O+H]+,[M-H]-",5,7.0,0.14285714285714285,True,227,False,CC1=CCC2C(C)(CO)CCCC2(C)C1CC12OC1C(O)C(CO)=CC2O | C=C1C(O)C(O)C2(CC3C(C)=CCC4C(C)(CO)CCCC34C)OC2C1O | C=C1CCC2C(C)(CO)C(OC(=O)C(C)=CC)CCC2(C)C1CCC(=O)O,18,True,235,True,True,hit@2-25
+v_0035,OCC1OC(OC2(CO)OC(CO)C(O)C2O)C(O)C(O)C1O,[M-H]-,1,6.0,0.16666666666666666,True,78,False,OCC1OC(OC2OC(CO)C(O)C(O)C2O)C(O)C(O)C1O | OCC1OC(OC2C(CO)OC(O)(CO)C2O)C(O)C(O)C1O | OCC1OC(OC2C(CO)OC(O)C(O)C2O)C(O)C(O)C1O,184,True,1300,True,True,hit@2-25
+v_0056,CCOC(=O)C(CCc1ccccc1)NC(C)C(=O)N1CCCC1C(=O)O,"[M+H]+,[M+Na]+,[M-H]-",9,6.0,0.16666666666666666,True,48,False,CCC1CN(C)c2ccccc2CN1C(=O)Nc1cccnc1-n1cccn1 | CCn1cc(C2NC(=O)CCC2Nc2ccnc(Cc3ccccc3)n2)cn1 | CCOc1ccc(C(C)(C)COCc2cccc(Oc3ccccc3)c2)cc1,110,True,576,True,True,hit@2-25
+v_0017,CC(CCC(=O)O)C1CCC2C3C(O)CC4CC(O)CCC4(C)C3CC(O)C12C,"[M+CH2O2-H]-,[M+Cl]-,[M+H]+,[M+K]+,[M+NH4]+,[M+Na]+,[M-2H2O+H]+,[M-H2O+H]+",8,5.0,0.2,True,63,False,CC(CCC(=O)O)C1CCC2C3C(O)CC4CC(O)C(O)CC4(C)C3CCC12C | CC(CCC(=O)O)C1CC(O)C2C3C(O)CC4CC(O)CCC4(C)C3CCC12C | CC(CCC(=O)O)C1CCC2C3C(O)CC4C(O)C(O)CCC4(C)C3CCC12C,713,True,658,True,True,hit@2-25
+v_0053,C=CCc1ccc(O)c(-c2ccc(O)c(CC=C)c2)c1,[M-H]-,2,5.0,0.2,True,84,False,C=CCc1ccc(O)c(-c2cc(CC=C)ccc2O)c1 | CC=C(C(=CC)c1ccc(O)cc1)c1ccc(O)cc1 | CC=Cc1ccc2c(c1)C(C)C(c1ccc(O)cc1)O2,343,True,248,True,True,hit@2-25
+v_0012,COc1cc2c(c(O)c1OC)c(=O)c1ccccc1n2C,[M+H]+,1,4.0,0.25,True,87,False,CCCN(CCC)S(=O)(=O)c1ccc(C(=O)O)cc1 | O=C(NC1CC(C(=O)O)C1)c1cccc(-c2ccoc2)c1 | COc1cc2c(c(OC)c1O)c(=O)c1ccccc1n2C,169,True,608,True,True,hit@2-25
+v_0051,O=C(O)C1Cc2c([nH]c3ccccc23)CN1,"[M+H]+,[M-H]-",2,4.0,0.25,True,61,False,COc1ccc2[nH]c3c(c2c1)CCNC3=O | O=C(O)C1NCCc2c1[nH]c1ccccc21 | O=C1Nc2ccccc2C(=O)N2CCCC12,64,True,417,True,True,hit@2-25
+v_0042,O=C(C=Cc1ccc(O)cc1)OCC1OC(Oc2c(-c3ccc(O)cc3)oc3cc(O)cc(O)c3c2=O)C(O)C(O)C1O,"[M+H]+,[M+Na]+,[M-H]-",12,4.0,0.25,True,49,False,Oc1cc(O)c2c(c1)OC(c1ccc(O)c(O)c1)C(OC1(c3ccc(O)c(O)c3)Oc3cc(O)cc(O)c3C(O)C1O)C2 | O=C(C=Cc1ccc(O)cc1)OCC1OC(Oc2ccc3c(=O)cc(-c4ccc(O)c(O)c4)oc3c2O)C(O)C(O)C1O | O=C(C=Cc1ccc(O)cc1)OC1C(Oc2c(-c3ccc(O)cc3)oc3cc(O)cc(O)c3c2=O)OC(CO)C(O)C1O,391,True,275,True,True,hit@2-25
+v_0008,O=c1cccc2n1CC1CNCC2C1,[M+H]+,4,4.0,0.25,True,37,False,COc1ccc2[nH]cc(CCN)c2c1 | CNCCc1c[nH]c2ccc(O)cc12 | CC(N)Cc1c[nH]c2ccc(O)cc12,174,True,227,True,True,hit@2-25
+v_0001,CC(C)(O)C1OC2CCC3(C)C(O)(CCC4Cc5c([nH]c6ccccc56)C43C)C2=CC1=O,"[M+Cl]-,[M+H]+,[M-H]-",12,4.0,0.25,True,30,False,CCC=CCC=CCC=CCC=CCC=CCC=CCCC(=O)NCCS(=O)(=O)O | COc1cc(OC)c2c(c1-c1c(C)cc(OC)c3c(OC)cccc13)CC(C)N(C)C2C | Cc1cc(-c2ccnc(Nc3cnn(C)c3)n2)ccc1CNC(=O)N1CC(OC(C)C)C1,101,True,73,True,True,hit@2-25
+v_0027,CC1(C)CCC2(C(=O)OC3OC(CO)C(O)C(O)C3O)CCC3(C)C(=CCC4C5(C)CC(O)C(O)C(C)(CO)C5CCC43C)C2C1,[M+NH4]+,1,4.0,0.25,True,59,False,CC1(C)CCC2(C(=O)OC3OC(CO)C(O)C(O)C3O)CCC3(C)C(=CCC4C5(C)CC(O)C(O)C(C)(C)C5CCC43C)C2C1O | CC1CCC2(C(=O)OC3OC(CO)C(O)C(O)C3O)CCC3(C)C(=CCC4C5(C)CC(O)C(O)C(C)(C)C5CCC43C)C2C1(C)O | CC1CCC2(C(=O)OC3OC(CO)C(O)C(O)C3O)CCC3(C)C(=CCC4C5(C)CCC(O)C(C)(CO)C5CCC43C)C2C1(C)O,14,True,39,True,True,hit@2-25
+v_0044,O=C(C=Cc1ccc(O)cc1)c1ccc(O)cc1O,"[M+H]+,[M-H]-",9,3.0,0.3333333333333333,True,141,False,O=C1CC(c2ccccc2)Oc2cc(O)cc(O)c21 | Cc1nnc(SCc2ccncc2)c(C#N)c1C | O=C(C=Cc1ccc(O)cc1)c1ccc(O)cc1O,284,True,1511,True,True,hit@2-25
+v_0009,O=C1c2ccc(O)cc2C(=O)c2ccc(O)cc21,[M-H]-,2,3.0,0.3333333333333333,True,21,False,O=C1c2cccc(O)c2C(=O)c2c(O)cccc21 | O=C1c2ccccc2C(=O)c2c1ccc(O)c2O | O=C1c2ccc(O)cc2C(=O)c2ccc(O)cc21,70,True,156,True,True,hit
+--- experiments/exp_004_entropy_search/results/C2/per_molecule.csv
+molecule_id,smiles,adducts,n_spectra,rank,rr,in_candidates,n_candidates,leak,top3,n_ref_truth,ref_truth_same_adduct_in_tol,window_max,truth_in_pool,pool_truth_in_tol,bucket
+v_0000,O=C(O)C1(O)CC(O)C(O)C(O)C1,[M-H]-,1,6.0,0.16666666666666666,True,19,False,Cn1c(=O)c2nccnc2n(C)c1=O | Cn1ccc(-n2cnc(C(=O)O)c2)n1 | CC1(C(=O)O)CCOC12CC2(F)F,0,False,37,True,True,hit@2-25
+v_0001,CC(C)(O)C1OC2CCC3(C)C(O)(CCC4Cc5c([nH]c6ccccc56)C43C)C2=CC1=O,"[M+Cl]-,[M+H]+,[M-H]-",12,16.0,0.0625,True,30,False,CCC=CCC=CCC=CCC=CCC=CCC=CCCC(=O)NCCS(=O)(=O)O | COc1cc(OC)c2c(c1-c1c(C)cc(OC)c3c(OC)cccc13)CC(C)N(C)C2C | Cc1cc(-c2ccnc(Nc3cnn(C)c3)n2)ccc1CNC(=O)N1CC(OC(C)C)C1,0,False,65,True,True,hit@2-25
+v_0002,CCCCC(=O)N(Cc1ccc(-c2ccccc2-c2nn[nH]n2)cc1)C(C(=O)O)C(C)C,"[M+H]+,[M+K]+,[M+Na]+,[M-H2O+H]+,[M-H]-",5,19.0,0.05263157894736842,True,36,False,CCc1ccc2occ(C(=O)NC3CCCN(c4cc(N5CCOCC5)ncn4)C3)c2c1 | Cc1nn(C(C)(C)C)c2nc(C(C)C)cc(C(=O)Nc3ccc4c(c3)OCC(=O)N4C)c12 | CC(C)(O)c1cc(Nc2cc(Oc3cn(C4CC4)nc3C3CCOCC3)ccn2)ccn1,0,False,156,True,True,hit@2-25
+v_0003,COc1cc2c(cc1OC)C(=O)C(CC1CCN(Cc3ccccc3)CC1)C2,[M+H]+,4,,0.0,True,50,False,CC1(C)Cc2c(cnn2-c2ccccn2)CN(C(=O)CCCc2c[nH]nn2)C1 | CCNC(=O)Nc1c[nH]nc1C1CCCN(c2ncnc3ccc(C)cc23)C1 | Cc1cc(C)n2nc(CC(=O)NC3CCN(Cc4ccccn4)CC3)nc2n1,0,False,139,True,True,cand_not_top25
+v_0004,CCC1OC(=O)C(C)C(OC2CC(C)(OC)C(O)C(C)O2)C(C)C(OC2OC(C)CC(N(C)C)C2O)C(C)(OC)CC(C)C(=O)C(C)C(O)C1(C)O,"[M+CH2O2-H]-,[M+H]+",2,5.0,0.2,True,6,False,CCCCC(C)CC(C)C(=O)N(C)C(CC(C)C)C(=O)NC(C(=O)N(C)C(C(=O)N1CC(O)CC1C(=O)N1C(=O)C=CC1C)C(C)C)C(C)OC(C)=O | CCCCC[C@H](O)/C=C/C1=C(\C[C@H](O)CO)[C@H](CCCCCCC(=O)O)N[C@@H]([C@@](C)(O)[C@H](CCCO)c2ccc(O)cc2)CC#Cc2ccccc2CC1 | COC(=O)CC[C@@H](C(=O)OC)N1Cc2c(O)c(OCC=C(C)CCC=C(C)CCC=C(C)C)c(O)c(CC=C(C)CCC=C(C)CCC=C(C)C)c2C1=O,0,False,25,True,True,hit@2-25
+v_0005,COc1ccc(C2CC(=O)c3c(O)cc(O)cc3O2)cc1O,"[M+H]+,[M-H]-",2,,0.0,True,222,False,COc1cc(C2CC(=O)c3c(O)cc(O)cc3O2)ccc1O | COc1cc(O)c2c(c1)OC(c1ccc(O)cc1)C(O)C2=O | Oc1cc2c(cc1O)C1c3ccc(O)c(O)c3OCC1(O)C2,0,False,1264,True,True,cand_not_top25
+v_0006,CC(=O)OCC(=O)C1(O)CCC2C3CCC4=CC(=O)CCC4(C)C3C(O)CC21C,"[M+CH2O2-H]-,[M+H]+,[M-H]-",10,,0.0,True,163,False,CC12CCC3C(CCC4(O)CC(O)CCC34C=O)C1(O)CCC2C1=CC(=O)OC1 | CCCC(CC(=O)O)c1c(OC)c(CC=C(C)C)c(O)c2c1OC(C)C(C)C2=O | COC(=O)C1=CC=C(C(C)C)CCC2=CCCC(C)(OC2=O)C(OC(C)=O)CC1,0,False,351,True,True,cand_not_top25
+v_0007,CC1C(=O)OC2C(O)C34C5OC(=O)C3(OC3OC(=O)C(O)C34C(C(C)(C)C)C5O)C12O,"[M+NH4]+,[M-H]-",9,25.0,0.04,True,29,False,CN1c2ccc(F)cc2N(CCNC(=O)N(c2ccccc2)c2ccccc2)S1(=O)=O | CCc1nn2c(CNS(=O)(=O)Cc3ccc(C)c(C)c3)c(-c3ccccc3)nc2s1 | CN1C(=O)C(Cc2ccc3ccccc3c2)N=C(c2ccc(O)cc2)c2cc(Cl)ccc21,0,False,127,True,True,hit@2-25
+v_0008,O=c1cccc2n1CC1CNCC2C1,[M+H]+,4,,0.0,True,37,False,COc1ccc2[nH]cc(CCN)c2c1 | CNCCc1c[nH]c2ccc(O)cc12 | CC(N)Cc1c[nH]c2ccc(O)cc12,0,False,141,True,True,cand_not_top25
+v_0009,O=C1c2ccc(O)cc2C(=O)c2ccc(O)cc21,[M-H]-,2,14.0,0.07142857142857142,True,21,False,O=C1c2cccc(O)c2C(=O)c2c(O)cccc21 | O=C1c2ccccc2C(=O)c2c1ccc(O)c2O | O=C1c2ccccc2C(=O)c2c(O)ccc(O)c21,0,False,128,True,True,hit@2-25
+v_0010,Cc1ccccc1N1C(=O)c2cc(S(N)(=O)=O)c(Cl)cc2NC1C,"[M+H]+,[M+Na]+,[M-H]-",8,18.0,0.05555555555555555,True,23,False,CC1Cc2ccccc2N1NC(=O)c1ccc(Cl)c(S(N)(=O)=O)c1 | O=C(COc1cc(Cl)ccc1Cl)N1CCOC(c2ccccc2)C1 | COc1ccccc1-c1cc(NS(=O)(=O)c2cc(F)cc(F)c2)[nH]n1,0,False,243,True,True,hit@2-25
+v_0011,COc1ccc2c3c1OC1CC(O)C=CC31CCN(C)C2,[M+H]+,5,,0.0,True,79,False,C=CCN(Cc1ccccc1F)Cc1nnnn1C1CC1 | CCc1cccc2c3c([nH]c12)C(CC)(CC(=O)O)OCC3 | O=C(C=CCCc1ccc2c(c1)OCO2)N1CCCCC1,0,False,713,True,True,cand_not_top25
+v_0012,COc1cc2c(c(O)c1OC)c(=O)c1ccccc1n2C,[M+H]+,1,,0.0,True,88,False,CCCN(CCC)S(=O)(=O)c1ccc(C(=O)O)cc1 | O=C(NC1CC(C(=O)O)C1)c1cccc(-c2ccoc2)c1 | COc1cc2c(c(OC)c1O)c(=O)c1ccccc1n2C,0,False,520,True,True,cand_not_top25
+v_0013,CCC1CN2CCc3cc(OC)c(OC)cc3C2CC1CC1NCCc2cc(OC)c(OC)cc21,[M+H]+,4,4.0,0.25,True,12,False,COC(/C=C/C=C/C(=O)N[C@H]1CCCNC(=O)[C@H](C)N(C)C(=O)[C@H](C(C)C)N(C)C1=O)C(C)O | CCc1nc(C)cc(NCC(=O)[C@@]2(O)CCC3C4CCC5=CC(=O)CC[C@]5(
+--- experiments/exp_004_entropy_search/results/C2/summary.json
+{
+  "regime": "C2",
+  "molecules": 60,
+  "mrr": 0.0735,
+  "recall_at_cand": 0.9833,
+  "recall_at_25": 0.55,
+  "buckets": {
+    "hit@1": 1,
+    "hit@2-25": 32,
+    "cand_not_top25": 26,
+    "reachable_missed": 0,
+    "unreachable": 1
+  },
+  "oracle_mrr_given_candidates": 0.9833,
+  "crowded_windows_gt256": 28,
+  "leak_hits": 0,
+  "runtime_prepare_s": 26.2,
+  "runtime_total_s": 345.9
+}
+--- experiments/exp_004_entropy_search/results/C2/worst20.csv
+molecule_id,smiles,adducts,n_spectra,rank,rr,in_candidates,n_candidates,leak,top3,n_ref_truth,ref_truth_same_adduct_in_tol,window_max,truth_in_pool,pool_truth_in_tol,bucket
+v_0021,COc1ccc2c(c1)[nH]c1c(C)nccc12,[M+H]+,4,,0.0,False,32,False,Nc1cccc(C(=O)Nc2ccccc2)c1 | O=C(Nc1ccccc1)Nc1ccccc1 | O=C(NCc1ccccc1)c1ccccn1,0,False,87,True,False,unreachable
+v_0052,O=C1CC(c2ccc(O)cc2)Oc2cc(O)cc(O)c21,"[M+H]+,[M+Na]+,[M-H]-",3,,0.0,True,165,False,COc1cc(O)c2c(=O)oc3cc(O)cc(C)c3c2c1 | O=C(C=Cc1ccc(O)cc1)c1c(O)cc(O)cc1O | O=C1C(O)c2c(O)cc(O)cc2OC1c1ccccc1,0,False,1515,True,True,cand_not_top25
+v_0054,O=c1cc(-c2ccccc2)oc2cc(O)c(O)c(O)c12,[M+H]+,3,,0.0,True,119,False,O=c1c(O)c(-c2ccccc2)oc2cc(O)cc(O)c12 | Cc1cc(O)c2c(c1)C(=O)c1cc(O)cc(O)c1C2=O | O=C1C(=Cc2ccc(O)c(O)c2)Oc2cc(O)ccc21,0,False,1515,True,True,cand_not_top25
+v_0044,O=C(C=Cc1ccc(O)cc1)c1ccc(O)cc1O,"[M+H]+,[M-H]-",9,,0.0,True,142,False,O=C1CC(c2ccccc2)Oc2cc(O)cc(O)c21 | Cc1nnc(SCc2ccncc2)c(C#N)c1C | O=C1CC(c2ccc(O)cc2)Oc2cc(O)ccc21,0,False,1443,True,True,cand_not_top25
+v_0005,COc1ccc(C2CC(=O)c3c(O)cc(O)cc3O2)cc1O,"[M+H]+,[M-H]-",2,,0.0,True,222,False,COc1cc(C2CC(=O)c3c(O)cc(O)cc3O2)ccc1O | COc1cc(O)c2c(c1)OC(c1ccc(O)cc1)C(O)C2=O | Oc1cc2c(cc1O)C1c3ccc(O)c(O)c3OCC1(O)C2,0,False,1264,True,True,cand_not_top25
+v_0035,OCC1OC(OC2(CO)OC(CO)C(O)C2O)C(O)C(O)C1O,[M-H]-,1,,0.0,True,79,False,OCC1OC(OC2OC(CO)C(O)C(O)C2O)C(O)C(O)C1O | OCC1OC(OC2C(CO)OC(O)(CO)C2O)C(O)C(O)C1O | OCC1OC(OC2C(CO)OC(O)C(O)C2O)C(O)C(O)C1O,0,False,1228,True,True,cand_not_top25
+v_0031,CCC1=CC2CN3CCc4c([nH]c5ccccc45)C(C(=O)OC)(C2)C13,[M+H]+,5,,0.0,True,88,False,[C-]#[N+]C(C)CC(=O)NCC1CCC(NC(=O)CC(C)[N+]#[C-])C(O)O1 | CCC12C=CCN3CCC4(C(=C(C(=O)OC)C1)Nc1ccccc14)C32 | COC(=O)C1CC23C=CCN4CCC5(c6ccccc6NC15C2C)C43,0,False,1193,True,True,cand_not_top25
+v_0028,COc1ccc(C2CC(=O)c3c(O)cc(OC)cc3O2)cc1,"[M+H]+,[M-H]-",7,,0.0,True,226,False,COc1c2ccoc2c(OCC=C(C)C)c2oc(=O)ccc12 | COc1cc(O)c(O)c(OC)c1C(=O)C=Cc1ccccc1 | COc1c(O)cc2ccc3c(OC)c(O)ccc3c2c1OC,0,False,1027,True,True,cand_not_top25
+v_0019,COC(=O)C1C(O)CCC2CN3CCc4c([nH]c5ccccc45)C3CC21,"[M+CH2O2-H]-,[M+H]+,[M-H]-",12,,0.0,True,152,False,CCC12CCCN3CCc4c(n(c5ccccc45)C(O)(C(=O)OC)C1)C32 | CCC1CN(C)C2Cc3c([nH]c4ccccc34)C(=O)CC1C2C(=O)OC | COC(=O)C1=C2Nc3ccccc3C23CCN2CCC1C(C(C)OC)C23,0,False,926,True,True,cand_not_top25
+v_0011,COc1ccc2c3c1OC1CC(O)C=CC31CCN(C)C2,[M+H]+,5,,0.0,True,79,False,C=CCN(Cc1ccccc1F)Cc1nnnn1C1CC1 | CCc1cccc2c3c([nH]c12)C(CC)(CC(=O)O)OCC3 | O=C(C=CCCc1ccc2c(c1)OCO2)N1CCCCC1,0,False,713,True,True,cand_not_top25
+v_0017,CC(CCC(=O)O)C1CCC2C3C(O)CC4CC(O)CCC4(C)C3CC(O)C12C,"[M+CH2O2-H]-,[M+Cl]-,[M+H]+,[M+K]+,[M+NH4]+,[M+Na]+,[M-2H2O+H]+,[M-H2O+H]+",8,,0.0,True,64,False,CC(CCC(=O)O)C1CCC2C3C(O)CC4CC(O)C(O)CC4(C)C3CCC12C | CC(CCC(=O)O)C1CC(O)C2C3C(O)CC4CC(O)CCC4(C)C3CCC12C | CC(CCC(=O)O)C1CCC2C3C(O)CC4C(O)C(O)CCC4(C)C3CCC12C,0,False,628,True,True,cand_not_top25
+v_0039,COc1ccc(-c2cc(=O)c3c(O)c(OC)c(OC)c(OC)c3o2)cc1OC,"[M+H]+,[M-H]-",2,,0.0,True,140,False,O=C(COc1ccc(Cl)cc1)N1CCN(Cc2ccc3c(c2)OCO3)CC1 | CC=Cc1occ(C(=O)c2c(OC)cc(OC)cc2C(=O)OC)c(=O)c1OC | COc1ccc(-c2cc(=O)c3c(OC)c(OC)c(OC)c(OC)c3o2)cc1O,0,False,609,True,True,cand_not_top25
+v_0012,COc1cc2c(c(O)c1OC)c(=O)c1ccccc1n2C,[M+H]+,1,,0.0,True,88,False,CCCN(CCC)S(=O)(=O)c1ccc(C(=O)O)cc1 | O=C(NC1CC(C(=O)O)C1)c1cccc(-c2ccoc2)c1 | COc1cc2c(c(OC)c1O)c(=O)c1ccccc1n2C,0,False,520,True,True,cand_not_top25
+v_0026,CCC1C2CC3C4N(C)c5ccccc5C45CC(C2C5O)N3C1O,[M+H]+,4,,0.0,True,76,False,CCC1CN2CCC1CC2C(O)c1ccnc2ccc(OC)cc12 | Cc1nc(C2CCCN(c3cc(C(C)C)nc4ncnn34)C2)n[nH]1 | CCC12CCc3[nH]c4c(OC)cccc4c3CCN(CC3OC31)C2,0,False,516,True,True,cand_not_top25
+v_0056,CCOC(=O)C(CCc1ccccc1)NC(C)C(=O)N1CCCC1C(=O)O,"[M+H]+,[M+Na]+,[M-H]-",9,,0.0,True,49,False,CCC1CN(C)c2ccccc2CN1C(=O)Nc1cccnc1-n1cccn1 | CCn1cc(C2NC(=O)CCC2Nc2ccnc(Cc3ccccc3)n2)cn1 | CCOc1ccc(C(C)(C)COCc2cccc(Oc3ccccc3)c2)cc1,0,False,491,True,True,cand_not_top25
+v_0034,O=C(C=Cc1ccc(O)c(O)c1)OC1CC(O)(C(=O)O)CC(O)C1O,"[M+H]+,[M+K]+,[M+Na]+,[M-H]-",4,,0.0,True,48,False,O=C(C=Cc1ccc(O)c(O)c
+--- experiments/exp_004_entropy_search/results/results.json
+{
+  "exp_id": "exp_003",
+  "predictor": {
+    "name": "exp003",
+    "params": {
+      "ppm": 8.5,
+      "min_da": 0.005,
+      "ppm_offset": 1.4,
+      "fragment_tol": 0.01,
+      "int_floor": 0.002,
+      "max_peaks": 256,
+      "ent_weight": true,
+      "analog_win_da": 200.0,
+      "strong_score": 0.2,
+      "max_library_guesses": 12,
+      "max_pool_ranked": 25,
+      "cache_dir": "cache",
+      "ppm_fallback": 30.0,
+      "n_analog": 100,
+      "sim_power": 4.0,
+      "coconut_bonus": 0.02
+    }
+  },
+  "limit": 60,
+  "est_lb": 0.4523,
+  "regimes": {
+    "C1": {
+      "regime": "C1",
+      "molecules": 60,
+      "mrr": 0.7174,
+      "recall_at_cand": 0.9833,
+      "recall_at_25": 0.9833,
+      "buckets": {
+        "hit@1": 34,
+        "hit@2-25": 25,
+        "cand_not_top25": 0,
+        "reachable_missed": 1,
+        "unreachable": 0
+      },
+      "oracle_mrr_given_candidates": 0.9833,
+      "crowded_windows_gt256": 37,
+      "leak_hits": 0,
+      "runtime_prepare_s": 25.5,
+      "runtime_total_s": 305.6
+    },
+    "C2": {
+      "regime": "C2",
+      "molecules": 60,
+      "mrr": 0.0735,
+      "recall_at_cand": 0.9833,
+      "recall_at_25": 0.55,
+      "buckets": {
+        "hit@1": 1,
+        "hit@2-25": 32,
+        "cand_not_top25": 26,
+        "reachable_missed": 0,
+        "unreachable": 1
+      },
+      "oracle_mrr_given_candidates": 0.9833,
+      "crowded_windows_gt256": 28,
+      "leak_hits": 0,
+      "runtime_prepare_s": 26.2,
+      "runtime_total_s": 345.9
+    }
+  }
+}
+--- experiments/exp_016_v27_anchor/results/C1/sanity_vs_notebook.csv
+molecule_id,n_ref,n_port,top1_equal,overlap25,identical_order,first_diff_rank
+v_0000,14,14,True,14,True,
+v_0001,25,25,True,25,True,
+v_0002,25,25,True,25,True,
+v_0003,25,25,True,25,True,
+v_0004,6,6,True,6,True,
+v_0005,25,25,True,25,True,
+v_0006,25,25,True,25,True,
+v_0007,24,24,True,24,True,
+v_0008,25,25,True,25,True,
+v_0009,17,17,True,17,True,
+v_0010,20,20,True,20,True,
+v_0011,25,25,True,25,True,
+v_0012,25,25,True,25,True,
+v_0013,13,13,True,13,True,
+v_0014,25,25,True,25,True,
+v_0015,23,23,True,23,True,
+v_0016,25,25,True,25,True,
+v_0017,25,25,True,25,True,
+v_0018,25,25,True,25,True,
+v_0019,25,25,True,25,True,
+
+--- experiments/exp_016_v27_anchor/results/C1/sanity_vs_notebook.json
+{
+  "regime": "C1",
+  "n": 20,
+  "top1_equal": 20,
+  "identical_order": 20,
+  "min_overlap25": 6,
+  "gate_pass": true
+}
+--- experiments/exp_016_v27_anchor/results/C1/summary.json
+{
+  "regime": "C1",
+  "molecules": 250,
+  "mrr": 0.8749,
+  "recall_at_cand": 1.0,
+  "recall_at_25": 0.992,
+  "buckets": {
+    "hit@1": 202,
+    "hit@2-25": 46,
+    "cand_not_top25": 2,
+    "reachable_missed": 0,
+    "unreachable": 0
+  },
+  "oracle_mrr_given_candidates": 1.0,
+  "crowded_windows_gt256": 126,
+  "leak_hits": 0,
+  "runtime_prepare_s": 19.8,
+  "runtime_total_s": 843.0,
+  "runtime_per_molecule_s": 3.29,
+  "predictor_info": null
+}
+--- experiments/exp_016_v27_anchor/results/C1/worst20.csv
+molecule_id,smiles,adducts,n_spectra,rank,rr,in_candidates,n_candidates,leak,top3,n_ref_truth,ref_truth_same_adduct_in_tol,window_max,truth_in_pool,pool_truth_in_tol,bucket
+v_0106,C=C1C(=O)OC2C1CCC(C)C1(O)C=CC(=O)C21C,"[M+H]+,[M+NH4]+,[M-2H2O+H]+,[M-H2O+H]+,[M-H]-",5,,0.0,True,401,False,C=C1C(=O)OC2CC(C)C3CC(=O)C(=O)C3(C)CC12 | C=C1CC(O)C2C(=C)C(=O)OC2C2C(=C)C(O)CC12 | C=C1C(=O)OC2CC3(C)C(O)C(=O)C=C(C)C3CC12,2,True,648,True,True,cand_not_top25
+v_0212,COc1ccc(-c2oc3cc(OC)cc(O)c3c(=O)c2OC)cc1,"[M+H]+,[M-H2O+H]+",2,,0.0,True,308,False,COc1ccc2c(c1OC)C(=O)O[C@H]2CC(=O)c1ccc(O)cc1 | COc1ccc([C@@H]2CC(=O)c3ccccc3O2)c(C(=O)O)c1OC | COc1ccc(C(=O)/C=C(\O)c2ccc3c(c2)OCO3)c(OC)c1,15,True,300,True,True,cand_not_top25
+v_0090,C=C(C)C1Cc2c(ccc3c2OC2COc4cc(OC)c(OC)cc4C2C3=O)O1,[M+CH2O2-H]-,2,23.0,0.043478260869565216,True,126,False,C/C=C(\C)c1cc(O)c(C)c2c1Oc1c(C=O)c(O)cc(/C(C)=C/C)c1C(=O)O2 | COc1ccc([C@@H]2CC(=O)c3c(C)cc4oc(=O)c(C)c(C)c4c3O2)cc1OC | C=CC/C=C/c1cc2c(cc1O)OC1COc3cc(OC)c(OC)cc3C1C2=O,256,False,159,True,True,hit@2-25
+v_0183,COc1ccc(-c2oc3cc(O)cc(O)c3c(=O)c2O)cc1,"[M+H]+,[M-H]-",2,17.0,0.058823529411764705,True,260,False,COc1ccc(-c2cc(=O)c3c(O)c(O)c(O)cc3o2)cc1 | COc1c(O)cc2oc(-c3ccc(O)cc3)cc(=O)c2c1O | COc1c(O)cc(O)c2c(=O)cc(-c3ccc(O)cc3)oc12,214,True,1153,True,True,hit@2-25
+v_0094,CC1OC(Oc2cc(O)c3c(=O)c(OC4OC(CO)C(O)C(O)C4O)c(-c4ccc(O)cc4)oc3c2)C(O)C(O)C1O,"[M+H]+,[M-H]-",2,11.0,0.09090909090909091,True,198,False,CC1OC(OCC2OC(Oc3c(-c4ccc(O)cc4)oc4cc(O)cc(O)c4c3=O)C(O)C(O)C2O)C(O)C(O)C1O | C[C@@H]1O[C@H](OC[C@H]2O[C@@H](Oc3cc(O)c4c(=O)c(O)c(-c5ccc(O)cc5)oc4c3)[C@H](O)[C@@H](O)[C@@H]2O)[C@H](O)[C@H](O)[C@H]1O | C[C@H]1O[C@H](O[C@@H]2[C@@H](O)[C@H](O)[C@@H](Oc3c(-c4ccc(O)cc4)oc4cc(O)cc(O)c4c3=O)O[C@H]2CO)[C@@H](O)[C@@H](O)[C@@H]1O,195,True,1192,True,True,hit@2-25
+v_0137,O=c1cc(-c2ccc(O)c(O)c2)oc2c(C3OC(CO)C(O)C(O)C3O)c(O)cc(O)c12,"[M+H]+,[M-H]-",7,6.0,0.16666666666666666,True,156,False,O=c1cc(-c2ccc(O)c(O)c2)oc2cc(O)c(C3OC(CO)C(O)C(O)C3O)c(O)c12 | O=c1c(-c2ccc(O)cc2O)coc2c(C3OC(CO)C(O)C(O)C3O)c(O)cc(O)c12 | O=C(C(=O)c1ccc(O[C@@H]2O[C@H](CO)[C@@H](O)[C@H](O)[C@H]2O)cc1O)c1ccc2c(c1)OCO2,302,True,1371,True,True,hit@2-25
+v_0206,CC1CCC2(C(=O)O)CCC3(C)C(=CCC4C5(C)CCC(O)C(C)(C)C5CCC43C)C2C1C,"[M+H]+,[M+NH4]+",4,6.0,0.16666666666666666,True,387,False,CC1(C)CCC2(C(=O)O)CCC3(C)C(=CCC4C5(C)CCC(O)C(C)(C)C5CCC43C)C2C1 | C[C@H]1C(=O)CC[C@H]2[C@@]1(C)CC[C@H]1[C@@]2(C(=O)O)CC[C@@]2(C)[C@@H]3CC(C)(C)CC[C@@]3(C)CC[C@@]12C | C[C@H]1C(=O)CC[C@@H]2[C@]1(C)CC[C@H]1[C@@]2(C)CC[C@@]2(C)[C@@H]3C[C@@](C)(C(=O)O)CC[C@]3(C)CC[C@]12C,770,True,836,True,True,hit@2-25
+v_0051,O=C(O)C1Cc2c([nH]c3ccccc23)CN1,"[M+H]+,[M-H]-",2,6.0,0.16666666666666666,True,71,False,O=C(O)[C@@H]1CNCc2[nH]c3ccccc3c21 | CC(=O)NCC(=O)c1c[nH]c2ccccc12 | NC(=O)/C=C/c1ccc(/C=C/C(N)=O)cc1,64,True,356,True,True,hit@2-25
+v_0079,CC1(C)CCC2(C(=O)O)CCC3(C)C(=CCC4C5(C)CC(O)C(O)C(C)(CO)C5CCC43C)C2C1O,"[M+H]+,[M-H]-",2,6.0,0.16666666666666666,True,116,False,CC1CCC2(C(=O)O)CCC3(C)C(=CCC4C5(C)CC(O)C(O)C(C)(CO)C5C(O)CC43C)C2C1C | C[C@H]1CC[C@@H]2OC(C)(C)C(=O)CC[C@@]2(C)[C@@]12O[C@H]([C@@]1(C)CC[C@@H]3OC(C)(C)C(=O)CC[C@]31C)C[C@H]2O | C[C@H]1CC[C@@H]2OC(C)(C)C(=O)CC[C@@]2(C)[C@]12C[C@H](O)[C@@H]([C@@]1(C)CC[C@@H]3OC(C)(C)C(=O)CC[C@]31C)O2,181,True,282,True,True,hit@2-25
+v_0027,CC1(C)CCC2(C(=O)OC3OC(CO)C(O)C(O)C3O)CCC3(C)C(=CCC4C5(C)CC(O)C(O)C(C)(CO)C5CCC43C)C2C1,[M+NH4]+,1,6.0,0.16666666666666666,True,59,False,CC1(C)CCC2(C(=O)OC3OC(CO)C(O)C(O)C3O)CCC3(C)C(=CCC4C5(C)CC(O)C(O)C(C)(C)C5CCC43C)C2C1O | CC1(C)CC[C@@]2(C(=O)O[C@@H]3O[C@H](CO)[C@@H](O)[C@H](O)[C@H]3O)CC[C@@]3(C)C(=CC[C@@H]4[C@@]5(C)C[C@@H](O)[C@H](O)C(C)(C)[C@@H]5[C@H](O)C[C@@]43C)[C@@H]2C1 | CC(C)(O)[C@@H]1CC[C@](C)([C@H]2[C@@H](O)C[C@@]3(C)[C@@H]4CC(=O)[C@H]5C(C)(C)[C@@H](O[C@@H]6O[C@H](CO)[C@@H](O)[C@H](O)[C@H]6O)CC[C@@]56C[C@@]46CC[C@]23C)O1,14,True,39,True,True,hit@2-25
+v_0152,CC1CCC2C(C)(C)C(O)CCC2(C)C12Cc1c(O)cc(CO)c(C=O)c1O2,[M-H]-,2,5.0,0.2,True,154,False,COc1cc(C(=O)O)c(O)c(C/C=C(\C)CC/C=C(\C)CCC=C(C)C)c1O | C[C@@H]1CC[C@H]2C(C)(C)[C@
+--- experiments/exp_016_v27_anchor/results/C2/sanity_vs_notebook.csv
+molecule_id,n_ref,n_port,top1_equal,overlap25,identical_order,first_diff_rank
+v_0000,14,14,True,14,True,
+v_0001,25,25,True,25,True,
+v_0002,25,25,True,25,True,
+v_0003,25,25,True,25,True,
+v_0004,6,6,True,6,True,
+v_0005,25,25,True,25,True,
+v_0006,25,25,True,25,True,
+v_0007,24,24,True,24,True,
+v_0008,25,25,True,25,True,
+v_0009,17,17,True,17,True,
+v_0010,20,20,True,20,True,
+v_0011,25,25,True,25,True,
+v_0012,25,25,True,25,True,
+v_0013,13,13,True,13,True,
+v_0014,25,25,True,25,True,
+v_0015,23,23,True,23,True,
+v_0016,25,25,True,25,True,
+v_0017,25,25,True,25,True,
+v_0018,25,25,True,25,True,
+v_0019,25,25,True,25,True,
+
+--- experiments/exp_016_v27_anchor/results/C2/sanity_vs_notebook.json
+{
+  "regime": "C2",
+  "n": 20,
+  "top1_equal": 20,
+  "identical_order": 20,
+  "min_overlap25": 6,
+  "gate_pass": true
+}
+--- experiments/exp_016_v27_anchor/results/C2/summary.json
+{
+  "regime": "C2",
+  "molecules": 250,
+  "mrr": 0.4415,
+  "recall_at_cand": 1.0,
+  "recall_at_25": 0.864,
+  "buckets": {
+    "hit@1": 71,
+    "hit@2-25": 145,
+    "cand_not_top25": 34,
+    "reachable_missed": 0,
+    "unreachable": 0
+  },
+  "oracle_mrr_given_candidates": 1.0,
+  "crowded_windows_gt256": 101,
+  "leak_hits": 0,
+  "runtime_prepare_s": 16.7,
+  "runtime_total_s": 602.4,
+  "runtime_per_molecule_s": 2.34,
+  "predictor_info": null
+}
+--- experiments/exp_016_v27_anchor/results/C2/worst20.csv
+molecule_id,smiles,adducts,n_spectra,rank,rr,in_candidates,n_candidates,leak,top3,n_ref_truth,ref_truth_same_adduct_in_tol,window_max,truth_in_pool,pool_truth_in_tol,bucket
+v_0031,CCC1=CC2CN3CCc4c([nH]c5ccccc45)C(C(=O)OC)(C2)C13,[M+H]+,5,,0.0,True,205,False,COc1ccc2[nH]c(C)c(C(O)CN3CCc4ccccc4C3)c2c1 | Cn1cc(CN[C@H]2[C@H](O)[C@H](O)C[C@@H]2c2ccccc2)c2ccccc21 | CCn1cc(CCC(=O)NCc2cccc(OC)c2)c2ccccc21,0,False,888,True,True,cand_not_top25
+v_0177,C=C1CC23CC1CCC2C12C=CC(O)C(C)(C(=O)O1)C2C3C(=O)O,"[M+CH2O2-H]-,[M+NH4]+,[M-H]-",10,,0.0,True,228,False,C=C1C[C@]23C[C@H]1[C@@H](O)C[C@H]2C1=C[C@@H]2C[C@@](C)(C(=O)O2)[C@H]1[C@@H]3C(=O)O | COc1ccc2cc([C@H](CCC(=O)O)C(C)(C)C(=O)O)ccc2c1 | C=C1CC23CC1CCC2C1=CC2OC(=O)C(C)(C2O)C1C3C(=O)O,0,False,862,True,True,cand_not_top25
+v_0097,CCC=CCC(O)C=CC=CCCCCCCCC(=O)O,"[M+Na]+,[M-2H2O+H]+,[M-H2O+H]+,[M-H]-",4,,0.0,True,104,False,CC(=O)[C@@H]1O[C@H]1[C@@H]1[C@@]2(C)CCCC(C)(C)[C@H]2CC[C@@]1(C)O | CC(=O)O[C@@H]1C[C@@H](C)[C@@]2(C)C[C@H]3CC[C@](C)(OC3(C)C)[C@H]12 | CCC=CCC=CC=CC(O)CCCCCCCC(=O)O,0,False,829,True,True,cand_not_top25
+v_0160,O=C1C(=Cc2ccc(O)c(O)c2)Oc2cc(O)ccc21,"[M+H]+,[M-H]-",5,,0.0,True,135,False,O=c1cc(-c2ccc(O)c(O)c2)oc2cc(O)ccc12 | O=c1c(-c2ccc(O)c(O)c2)coc2cc(O)ccc12 | O=c1c(-c2cc(O)cc(O)c2)coc2cc(O)ccc12,0,False,793,True,True,cand_not_top25
+v_0161,Cc1cc(O)c2c(c1)C(=O)c1cc(O)cc(O)c1C2=O,"[M+H]+,[M-H]-",2,,0.0,True,135,False,O=c1c(O)c(-c2ccccc2)oc2cc(O)cc(O)c12 | O=C(O)c1cccc(C(=O)c2cccc(C(=O)O)c2)c1 | O=Cc1c(-c2ccc(O)cc2O)oc2cc(O)ccc12,0,False,781,True,True,cand_not_top25
+v_0214,CCC12CCCN3CCc4c(n(c5ccccc45)C(=O)C1)C32,[M+H]+,4,,0.0,True,118,False,C=C[C@H]1CNCC[C@H]1CCC(=O)c1ccnc2ccccc12 | CC=C1CN(C)CC2CCc3c([nH]c4ccccc34)C(=O)C12 | C=Cc1c2c(nc3cc(O)ccc13)N1CCC[C@](CC)(C2)C1,0,False,722,True,True,cand_not_top25
+v_0130,CC12C=CC(=O)C=C1CCC1C2C(O)CC2(C)C1CCC2(O)C(=O)CO,"[M+CH2O2-H]-,[M+H]+,[M+K]+,[M+Na]+,[M-2H2O+H]+,[M-H2O+H]+",6,,0.0,True,253,False,CC12CCC(=O)C=C1CCC1C2C(O)CC2(C=O)C(C(=O)CO)CCC12 | C[C@]12C=CC(=O)C[C@H]1CC[C@@H]1[C@@H]2C(=O)C[C@@]2(C)[C@H]1CC[C@]2(O)C(=O)CO | C/C1=C/CCC(C(=O)O)=CCc2cc(ccc2O)OC(C)(C)[C@@H](O)CC1,0,False,694,True,True,cand_not_top25
+v_0126,COc1c(C)c(O)cc2c1C(=O)c1ccccc1C2=O,"[M+H]+,[M-H]-",2,,0.0,True,147,False,COc1ccc(-c2cc3ccc(O)cc3oc2=O)cc1 | COc1cc2c(cc1OC)C(=O)c1ccccc1C2=O | COc1ccc2c(c1)C(=O)c1ccc(OC)cc1C2=O,0,False,673,True,True,cand_not_top25
+v_0176,O=c1c2ccccc2nc2n1CCC2O,[M+H]+,3,,0.0,True,78,False,O=C(O)c1cccn1Cc1ccncc1 | COC(=O)c1ccnn1-c1ccccc1 | O/N=C/Cc1cc(-c2ccccc2)no1,0,False,657,True,True,cand_not_top25
+v_0106,C=C1C(=O)OC2C1CCC(C)C1(O)C=CC(=O)C21C,"[M+H]+,[M+NH4]+,[M-2H2O+H]+,[M-H2O+H]+,[M-H]-",5,,0.0,True,401,False,C=C1C(=O)OC2CC(C)C3CC(=O)C(=O)C3(C)CC12 | C=C1CC(O)C2C(=C)C(=O)OC2C2C(=C)C(O)CC12 | C=C1C(=O)OC2CC3(C)C(O)C(=O)C=C(C)C3CC12,0,False,648,True,True,cand_not_top25
+v_0093,CC12CCC(=O)C=C1CCC1C2C(O)CC2(C)C1CCC2(O)C(=O)CO,"[M+CH2O2-H]-,[M+Cl]-,[M+H]+,[M+K]+,[M+Na]+,[M-H2O+H]+",6,,0.0,True,272,False,C[C@]12C[C@H](O)[C@H]3[C@@H](C[C@@H](O)C4=CC(=O)CC[C@@]43C)[C@@H]1CC[C@@H]2C(=O)CO | C[C@]12CCC(=O)C[C@H]1CC[C@@H]1[C@@H]2C(=O)C[C@@]2(C)[C@H]1CC[C@]2(O)C(=O)CO | C[C@]12CCC(=O)C=C1CC[C@H]1[C@@H]3CC[C@](O)(C(=O)CO)[C@@]3(CO)CC[C@@H]12,0,False,547,True,True,cand_not_top25
+v_0167,O=c1cc(-c2ccccc2)oc2cc(O)cc(O)c12,[M-H]-,1,,0.0,True,99,False,O=c1c(-c2ccc(O)cc2)coc2cc(O)ccc12 | O=c1cc(-c2cc(O)cc(O)c2)oc2ccccc12 | O=c1cc(-c2ccccc2)oc2ccc(O)c(O)c12,0,False,495,True,True,cand_not_top25
+v_0206,CC1CCC2(C(=O)O)CCC3(C)C(=CCC4C5(C)CCC(O)C(C)(C)C5CCC43C)C2C1C,"[M+H]+,[M+NH4]+",4,,0.0,True,387,False,CC1(C)CCC2(C(=O)O)CCC3(C)C(=CCC4C5(C)CCC(O)C(C)(C)C5CCC43C)C2C1 | C[C@H]1C(=O)CC[C@H]2[C@@]1(C)CC[C@H]1[C@@]2(C(=O)O)CC[C@@]2(C)[C@@H]3CC(C)(C)CC[C@@]3(C)CC[C@@]12C | C[C@H]1C(=O)CC[C@@H]2[C@]1(C)CC[C@H]1[C@@]2(C)CC[C@@]2(C)[C@@H]3C[C@@](C)(C(=O)O)CC[C@]3(C)CC[C@]12C,0,False,494,True,True,cand_not_top25
+v_0017,CC(CCC(=O)O)C1CCC2C3C(O)CC4CC(O)CCC4(C)C3CC(O)C12C,"[M+CH2O2-H]-,[M+Cl]-,[M+H]+,[M+K]+,[M+NH4]+,[M+Na]+,[M-2H2O+H]+,[M-H2O+H]+",8,,0.0,True,69,False,CC(=O)
+--- experiments/exp_016_v27_anchor/results/C3/summary.json
+{
+  "regime": "C3",
+  "molecules": 250,
+  "mrr": 0.0,
+  "recall_at_cand": 0.0,
+  "recall_at_25": 0.0,
+  "buckets": {
+    "hit@1": 0,
+    "hit@2-25": 0,
+    "cand_not_top25": 0,
+    "reachable_missed": 0,
+    "unreachable": 250
+  },
+  "oracle_mrr_given_candidates": 0.0,
+  "crowded_windows_gt256": 101,
+  "leak_hits": 0,
+  "runtime_prepare_s": 576.1,
+  "runtime_total_s": 1151.9,
+  "runtime_per_molecule_s": 2.3,
+  "predictor_info": null
+}
+--- experiments/exp_016_v27_anchor/results/C3/worst20.csv
+molecule_id,smiles,adducts,n_spectra,rank,rr,in_candidates,n_candidates,leak,top3,n_ref_truth,ref_truth_same_adduct_in_tol,window_max,truth_in_pool,pool_truth_in_tol,bucket
+v_0137,O=c1cc(-c2ccc(O)c(O)c2)oc2c(C3OC(CO)C(O)C(O)C3O)c(O)cc(O)c12,"[M+H]+,[M-H]-",7,,0.0,False,155,False,O=c1cc(-c2ccc(O)c(O)c2)oc2cc(O)c(C3OC(CO)C(O)C(O)C3O)c(O)c12 | O=c1c(-c2ccc(O)cc2O)coc2c(C3OC(CO)C(O)C(O)C3O)c(O)cc(O)c12 | O=c1c(O)c(-c2ccc(O)c(O)c2)oc2c([C@@H]3OC(CO)[C@@H](O)[C@H](O)C3O)c(O)ccc12,0,False,1291,False,False,unreachable
+v_0094,CC1OC(Oc2cc(O)c3c(=O)c(OC4OC(CO)C(O)C(O)C4O)c(-c4ccc(O)cc4)oc3c2)C(O)C(O)C1O,"[M+H]+,[M-H]-",2,,0.0,False,197,False,CC1OC(OCC2OC(Oc3c(-c4ccc(O)cc4)oc4cc(O)cc(O)c4c3=O)C(O)C(O)C2O)C(O)C(O)C1O | C[C@@H]1O[C@H](OC[C@H]2O[C@@H](Oc3cc(O)c4c(=O)c(O)c(-c5ccc(O)cc5)oc4c3)[C@H](O)[C@@H](O)[C@@H]2O)[C@H](O)[C@H](O)[C@H]1O | C[C@H]1O[C@H](O[C@@H]2[C@@H](O)[C@H](O)[C@@H](Oc3c(-c4ccc(O)cc4)oc4cc(O)cc(O)c4c3=O)O[C@H]2CO)[C@@H](O)[C@@H](O)[C@@H]1O,0,False,1113,False,False,unreachable
+v_0248,COc1cc2oc(-c3ccccc3)cc(=O)c2c(O)c1O,"[M+H]+,[M-H]-",2,,0.0,False,214,False,COc1c(O)cc2oc(-c3ccccc3)cc(=O)c2c1O | COc1cc(O)c2c(=O)cc(-c3ccccc3)oc2c1O | COc1c(O)cc(O)c2c(=O)cc(-c3ccccc3)oc12,0,False,1010,False,False,unreachable
+v_0081,O=C(O)C1OC(Oc2cc3oc(-c4ccccc4)cc(=O)c3c(O)c2O)C(O)C(O)C1O,"[M+H]+,[M+Na]+,[M-H]-",10,,0.0,False,36,False,O=C(O)C1O[C@@H](Oc2c(O)cc(O)c3c(=O)cc(-c4ccccc4)oc23)C(O)[C@@H](O)[C@@H]1O | O=C(O)C1OC(Oc2cc(O)c3c(=O)cc(-c4ccc(O)cc4)oc3c2)C(O)C(O)C1O | O=C(O)C1OC(Oc2cc(O)c3c(=O)cc(-c4ccccc4)oc3c2O)C(O)C(O)C1O,0,False,1007,False,False,unreachable
+v_0035,OCC1OC(OC2(CO)OC(CO)C(O)C2O)C(O)C(O)C1O,[M-H]-,1,,0.0,False,223,False,OCC1OC(OC2OC(CO)C(O)C(O)C2O)C(O)C(O)C1O | O=C(CO)C(O)C(OC1OC(CO)C(O)C(O)C1O)C(O)CO | O=C(CO)C(OC1OC(CO)C(O)C(O)C1O)C(O)C(O)CO,0,False,998,False,False,unreachable
+v_0187,COc1ccc2nc([S+]([O-])Cc3ncc(C)c(OC)c3C)[nH]c2c1,"[M+H]+,[M-H]-",2,,0.0,False,152,False,COc1ccc(-c2noc(NCc3ccc(O)c(F)c3)n2)cc1OC | CC(C(=O)Nc1ccc2c(c1)N(C)S(=O)(=O)N2C)c1ccccc1 | CCSc1ccc(C(=O)Nc2ccc(OCC(N)=O)cc2C)cn1,0,False,959,False,False,unreachable
+v_0118,CN1C2CCCC1CC(NC(=O)c1nn(C)c3ccccc13)C2,[M+H]+,4,,0.0,False,282,False,O=C(NC[C@@H]1CCCN2CCCC[C@H]12)c1n[nH]c2ccccc12 | CN1CCC(N2CC[C@H](c3nnc(-c4ccccc4)o3)C2)CC1 | CC[C@H]1CN2CC[C@H]1C[C@@H]2CNC(=O)Nc1cccc(C#N)c1,0,False,916,False,False,unreachable
+v_0185,CN1C2CC(OC(=O)C(CO)c3ccccc3)CC1C1OC12,[M+H]+,5,,0.0,False,215,False,CN1[C@@H]2C[C@@H](OC(=O)/C=C/c3ccccc3)C[C@H]1[C@H](O)[C@@H]2O | CN1[C@@H]2CC(=O)[C@H]1C[C@@H](OC(=O)[C@H](CO)c1ccccc1)C2 | CC(=O)O[C@@H]1C[C@H]2C[C@@H](OC(=O)c3ccccc3)C[C@@H]1N2C,0,False,901,False,False,unreachable
+v_0031,CCC1=CC2CN3CCc4c([nH]c5ccccc45)C(C(=O)OC)(C2)C13,[M+H]+,5,,0.0,False,204,False,COc1ccc2[nH]c(C)c(C(O)CN3CCc4ccccc4C3)c2c1 | Cn1cc(CN[C@H]2[C@H](O)[C@H](O)C[C@@H]2c2ccccc2)c2ccccc21 | CCn1cc(CCC(=O)NCc2cccc(OC)c2)c2ccccc21,0,False,888,False,False,unreachable
+v_0043,CC1CCCC(O)CCCCCc2cc(O)cc(O)c2C(=O)O1,"[M+H]+,[M-H]-",5,,0.0,False,196,False,C[C@H](O)CCC[C@H]1CCCCCc2cc(O)cc(O)c2C(=O)O1 | CCCCCCC[C@@H]1Cc2c(C)c(O)c(C(=O)O)c(O)c2CO1 | CCOC(=O)c1c(O)cc(O)cc1CCCCCCCC(C)=O,0,False,876,False,False,unreachable
+v_0183,COc1ccc(-c2oc3cc(O)cc(O)c3c(=O)c2O)cc1,"[M+H]+,[M-H]-",2,,0.0,False,258,False,COc1ccc(-c2cc(=O)c3c(O)c(O)c(O)cc3o2)cc1 | COc1c(O)cc2oc(-c3ccc(O)cc3)cc(=O)c2c1O | COc1c(O)cc(O)c2c(=O)cc(-c3ccc(O)cc3)oc12,0,False,874,False,False,unreachable
+v_0071,COc1c(C)c2c(c(O)c1CC=C(C)CCC(=O)O)C(=O)OC2,"[M+H]+,[M-H]-",9,,0.0,False,202,False,COc1c(CC=C(C)CCC(=O)O)c(O)c(C)c2c1C(=O)OC2 | CCC/C=C/C=C/C(=O)c1c(OC)cc(CO)c(C(=O)O)c1O | CCC/C=C/[C@@H]1CC(=O)c2c(OC)cc(CO)c(C(=O)O)c2O1,0,False,868,False,False,unreachable
+v_0177,C=C1CC23CC1CCC2C12C=CC(O)C(C)(C(=O)O1)C2C3C(=O)O,"[M+CH2O2-H]-,[M+NH4]+,[M-H]-",10,,0.0,False,227,False,C=C1C[C@]23C[C@H]1[C@@H](O)C[C@H]2C1=C[C@@H]2C[C@@](C)(C(=O)O2)[C@H]1[C@@H]3C(=O)O | COc1ccc2cc([C@H](CCC(=O)O)C(C)(C)C(=O)O)ccc2c1 | C=C1CC23CC1CCC2C1=CC2OC(=O)C(C)(C2O)C1C3C(=O)O,0,False,862,False,False,unreachable
+v_0178,O=c1cc(-c2ccc(O)cc2)oc2
+--- experiments/exp_016_v27_anchor/results/calibration.json
+{
+  "n_pairs": 37,
+  "offset_ppm": 1.2840695818908054,
+  "mad": 0.7769490232303687
+}
+--- experiments/exp_016_v27_anchor/results/results.json
+{
+  "exp_id": "exp_016",
+  "git": {
+    "commit": "d51e63e",
+    "dirty": false
+  },
+  "predictor": {
+    "name": "exp016_v27",
+    "params": {
+      "pool_npz": "artifacts/v17_builder/pool_712k_precomputed.npz",
+      "rankers": "artifacts/v17_builder/rankers_v17_ensemble.joblib",
+      "fp_models": "artifacts/fp_models",
+      "device": "cpu",
+      "torch_threads": 0,
+      "ppm_offset": 1.2840695818908054,
+      "ppm_win": 8.5,
+      "ppm_fallback": 30.0,
+      "int_floor": 0.002,
+      "max_peaks": 256,
+      "mz_tol": 0.01,
+      "int_power": 1.0,
+      "ent_weight": true,
+      "analog_win": 200.0,
+      "n_analog": 100,
+      "sim_power": 4.0,
+      "topn": 25,
+      "min_da": 0.0018,
+      "frag_soft_cap": 34,
+      "frag_hard_cap": 80,
+      "max_abs_offset": 5.0,
+      "use_analog_fallback": false,
+      "frag_workers": 4,
+      "nfeat": 31,
+      "calib_n_sample": 150,
+      "calib_sim_thresh": 0.9,
+      "calib_search_ppm": 25.0,
+      "calib_seed": 0,
+      "calib_min_pairs": 20
+    }
+  },
+  "limit": 0,
+  "lb_weights": {
+    "C1": 0.5,
+    "C2": 0.35,
+    "C3": 0.15
+  },
+  "est_lb": 0.592,
+  "regimes": {
+    "C1": {
+      "regime": "C1",
+      "molecules": 250,
+      "mrr": 0.8749,
+      "recall_at_cand": 1.0,
+      "recall_at_25": 0.992,
+      "buckets": {
+        "hit@1": 202,
+        "hit@2-25": 46,
+        "cand_not_top25": 2,
+        "reachable_missed": 0,
+        "unreachable": 0
+      },
+      "oracle_mrr_given_candidates": 1.0,
+      "crowded_windows_gt256": 126,
+      "leak_hits": 0,
+      "runtime_prepare_s": 19.8,
+      "runtime_total_s": 843.0,
+      "runtime_per_molecule_s": 3.29,
+      "predictor_info": null
+    },
+    "C2": {
+      "regime": "C2",
+      "molecules": 250,
+      "mrr": 0.4415,
+      "recall_at_cand": 1.0,
+      "recall_at_25": 0.864,
+      "buckets": {
+        "hit@1": 71,
+        "hit@2-25": 145,
+        "cand_not_top25": 34,
+        "reachable_missed": 0,
+        "unreachable": 0
+      },
+      "oracle_mrr_given_candidates": 1.0,
+      "crowded_windows_gt256": 101,
+      "leak_hits": 0,
+      "runtime_prepare_s": 16.7,
+      "runtime_total_s": 602.4,
+      "runtime_per_molecule_s": 2.34,
+      "predictor_info": null
+    },
+    "C3": {
+      "regime": "C3",
+      "molecules": 250,
+      "mrr": 0.0,
+      "recall_at_cand": 0.0,
+      "recall_at_25": 0.0,
+      "buckets": {
+        "hit@1": 0,
+        "hit@2-25": 0,
+        "cand_not_top25": 0,
+        "reachable_missed": 0,
+        "unreachable": 250
+      },
+      "oracle_mrr_given_candidates": 0.0,
+      "crowded_windows_gt256": 101,
+      "leak_hits": 0,
+      "runtime_prepare_s": 576.1,
+      "runtime_total_s": 1151.9,
+      "runtime_per_molecule_s": 2.3,
+      "predictor_info": null
+    }
+  }
+}
+
+=== exp_016 LOG TAILS ===
+--- experiments/exp_016_v27_anchor/calibrate.log
+  "mad": 0.7769490232303687
+}
+	Command being timed: ".venv/bin/python -m casmi.harness.v27_sanity calibrate --config configs/exp_016.yaml"
+	User time (seconds): 89.79
+	System time (seconds): 21.90
+	Percent of CPU this job got: 261%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:42.79
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 14665016
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 6208
+	Minor (reclaiming a frame) page faults: 3409178
+	Voluntary context switches: 14641
+	Involuntary context switches: 191578
+	Swaps: 0
+	File system inputs: 2029040
+	File system outputs: 1312
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+--- experiments/exp_016_v27_anchor/full250.log
+      "regime": "C3",
+      "molecules": 250,
+      "mrr": 0.0,
+      "recall_at_cand": 0.0,
+      "recall_at_25": 0.0,
+      "buckets": {
+        "hit@1": 0,
+        "hit@2-25": 0,
+        "cand_not_top25": 0,
+        "reachable_missed": 0,
+        "unreachable": 250
+      },
+      "oracle_mrr_given_candidates": 0.0,
+      "crowded_windows_gt256": 101,
+      "leak_hits": 0,
+      "runtime_prepare_s": 576.1,
+      "runtime_total_s": 1151.9,
+      "runtime_per_molecule_s": 2.3,
+      "predictor_info": null
+    }
+  }
+}
+
+exp-log row:
+| 016 | done | | | | 0.875 | 0.442 | 0.000 | 0.592 | | | | |
+--- experiments/exp_016_v27_anchor/port_C1_n20.log
+      "regime": "C1",
+      "molecules": 20,
+      "mrr": 0.8667,
+      "recall_at_cand": 1.0,
+      "recall_at_25": 1.0,
+      "buckets": {
+        "hit@1": 16,
+        "hit@2-25": 4,
+        "cand_not_top25": 0,
+        "reachable_missed": 0,
+        "unreachable": 0
+      },
+      "oracle_mrr_given_candidates": 1.0,
+      "crowded_windows_gt256": 7,
+      "leak_hits": 0,
+      "runtime_prepare_s": 19.8,
+      "runtime_total_s": 90.0,
+      "runtime_per_molecule_s": 3.51,
+      "predictor_info": null
+    }
+  }
+}
+
+exp-log row:
+| 016 | done | | | | 0.867 |  |  | 0.867 | | | | |
+--- experiments/exp_016_v27_anchor/port_C2_n20.log
+      "regime": "C2",
+      "molecules": 20,
+      "mrr": 0.4679,
+      "recall_at_cand": 1.0,
+      "recall_at_25": 0.95,
+      "buckets": {
+        "hit@1": 5,
+        "hit@2-25": 14,
+        "cand_not_top25": 1,
+        "reachable_missed": 0,
+        "unreachable": 0
+      },
+      "oracle_mrr_given_candidates": 1.0,
+      "crowded_windows_gt256": 6,
+      "leak_hits": 0,
+      "runtime_prepare_s": 27.0,
+      "runtime_total_s": 107.4,
+      "runtime_per_molecule_s": 4.02,
+      "predictor_info": null
+    }
+  }
+}
+
+exp-log row:
+| 016 | done | | | |  | 0.468 |  | 0.468 | | | | |
+--- experiments/exp_016_v27_anchor/port_C3_n20.log
+      "regime": "C3",
+      "molecules": 20,
+      "mrr": 0.0,
+      "recall_at_cand": 0.0,
+      "recall_at_25": 0.0,
+      "buckets": {
+        "hit@1": 0,
+        "hit@2-25": 0,
+        "cand_not_top25": 0,
+        "reachable_missed": 0,
+        "unreachable": 20
+      },
+      "oracle_mrr_given_candidates": 0.0,
+      "crowded_windows_gt256": 6,
+      "leak_hits": 0,
+      "runtime_prepare_s": 63.9,
+      "runtime_total_s": 128.3,
+      "runtime_per_molecule_s": 3.22,
+      "predictor_info": null
+    }
+  }
+}
+
+exp-log row:
+| 016 | done | | | |  |  | 0.000 | 0.000 | | | | |
+--- experiments/exp_016_v27_anchor/ref_C1.log
+[SMOKE] glucose InChIKey14 -> WQZGKKKJIJFFOK  (expect WQZGKKKJIJFFOK)
+[REF] ---- executing notebook cell 9 ----
+  Loaded fp_merged_m1.pt: d=512, layers=6, step=24000
+  Loaded fp_single_s2.pt: d=512, layers=6, step=20000
+[SUCCESS] Neural FPNet Ensemble ready: 1 single + 1 merged on cpu
+[INFO] Reference Library loaded: 2,538,424 spectra / 275,810 unique structures (26.1s)
+[PRECLEAN] 2,538,424 spectra  raw 3.21 GB -> cleaned 0.82 GB  (10.8s)
+[INFO] Built representative analog set: 275,632 unique scaffolds.
+[DIAG] train structures present in pool: 5000/5000 = 1.000
+[REF] calibrate_ppm_offset overridden -> +1.2841 ppm
+[CFG] PPM_WIN=8.5  PPM_OFFSET=+1.284  MIN_DA=0.0018  ANALOG_FALLBACK=False
+[INFO] Evaluating 108 spectra across 20 unique test molecules...
+  Processed 1/20 molecules | Elapsed: 57.9s
+  [TIMERS @ 1] analog=   2.0s(36.0%)  fpnet=   1.6s(28.4%)  lib=   1.6s(28.1%)  rank=   0.3s( 5.4%)  frag=   0.1s( 1.1%)  dedup=   0.0s( 0.8%)  cand=   0.0s( 0.2%)
+  Processed 20/20 molecules | Elapsed: 122.1s
+  [TIMERS @ 20] analog=  46.2s(66.3%)  dedup=  10.3s(14.7%)  fpnet=   4.8s( 6.9%)  rank=   3.3s( 4.7%)  frag=   3.2s( 4.5%)  lib=   1.7s( 2.4%)  cand=   0.3s( 0.4%)
+[INFO] absolute mass floor bound the window for 2/20 molecules
+[INFO] tautomer key cache: 446 distinct SMILES canonicalised
+
+[SUCCESS] submission.csv generated successfully with shape (20, 2) in 122.1s total.
+Exception ignored in: <function Pool.__del__ at 0x7c543fc3d120>
+Traceback (most recent call last):
+  File "/home/amoeba/snap/code/264/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/multiprocessing/pool.py", line 271, in __del__
+  File "/home/amoeba/snap/code/264/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/multiprocessing/queues.py", line 393, in put
+AttributeError: 'NoneType' object has no attribute 'dumps'
+--- experiments/exp_016_v27_anchor/ref_C2.log
+[SMOKE] glucose InChIKey14 -> WQZGKKKJIJFFOK  (expect WQZGKKKJIJFFOK)
+[REF] ---- executing notebook cell 9 ----
+  Loaded fp_merged_m1.pt: d=512, layers=6, step=24000
+  Loaded fp_single_s2.pt: d=512, layers=6, step=20000
+[SUCCESS] Neural FPNet Ensemble ready: 1 single + 1 merged on cpu
+[INFO] Reference Library loaded: 2,532,734 spectra / 275,788 unique structures (31.0s)
+[PRECLEAN] 2,532,734 spectra  raw 3.21 GB -> cleaned 0.82 GB  (9.9s)
+[INFO] Built representative analog set: 275,610 unique scaffolds.
+[DIAG] train structures present in pool: 5000/5000 = 1.000
+[REF] calibrate_ppm_offset overridden -> +1.2841 ppm
+[CFG] PPM_WIN=8.5  PPM_OFFSET=+1.284  MIN_DA=0.0018  ANALOG_FALLBACK=False
+[INFO] Evaluating 108 spectra across 20 unique test molecules...
+  Processed 1/20 molecules | Elapsed: 55.2s
+  [TIMERS @ 1] analog=   2.1s(32.9%)  fpnet=   1.9s(30.7%)  lib=   1.8s(29.1%)  rank=   0.4s( 5.9%)  dedup=   0.1s( 1.1%)  frag=   0.0s( 0.2%)  cand=   0.0s( 0.0%)
+  Processed 20/20 molecules | Elapsed: 131.8s
+  [TIMERS @ 20] analog=  54.8s(66.2%)  dedup=  11.9s(14.3%)  fpnet=   6.2s( 7.5%)  rank=   4.1s( 5.0%)  frag=   3.8s( 4.6%)  lib=   1.9s( 2.3%)  cand=   0.0s( 0.0%)
+[INFO] absolute mass floor bound the window for 2/20 molecules
+[INFO] tautomer key cache: 446 distinct SMILES canonicalised
+
+[SUCCESS] submission.csv generated successfully with shape (20, 2) in 131.8s total.
+Exception ignored in: <function Pool.__del__ at 0x760173835120>
+Traceback (most recent call last):
+  File "/home/amoeba/snap/code/264/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/multiprocessing/pool.py", line 271, in __del__
+  File "/home/amoeba/snap/code/264/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/multiprocessing/queues.py", line 393, in put
+AttributeError: 'NoneType' object has no attribute 'dumps'
+
+=== DOCS ===
+--- docs/decisions/ADR-001-retrieval-first.md
+# ADR-001 — Retrieval + learned ranking first; de novo generation last
+- Status: proposed (confirm with teammate)
+- Date: 2026-09-24
+
+## Context
+- The metric only rewards an exact 2D match (InChIKey14) within 25 guesses.
+- Class 1 (public spectra exist) and class 2 (in PubChem/COCONUT) are reachable by retrieval over train + pool.
+- On public benchmarks (MassSpecGym) exact-match top-1 for de novo generation is near zero.
+- exp_000 at 0.127 vs leader 0.417 — the gap is plausibly explained by retrieval bugs and random class-2 ranking (plan §2).
+
+## Options
+| option | pros | cons |
+|---|---|---|
+| A. Transformer spectrum→SMILES | covers class 3 in principle | near-zero exact match; expensive; no help for class 1/2 |
+| B. Retrieval + heuristic ranking | cheap, fixes biggest losses | ceiling on class 2 |
+| C. B + learned spectrum encoder as a scorer + LTR reranker | reuses our transformer; attacks class 2 | needs clean leave-structure-out training data |
+
+## Decision
+C. The transformer is repurposed as a spectrum encoder (fingerprint head / contrastive), not a SMILES decoder.
+
+## Consequences
+We stop investing in the SMILES-decoding baseline. Class 3 is handled later by analog edits (exp_009).
+
+## Revisit if
+Fitted class-3 share from LB calibration > 0.3, or C1+C2 plateau with headroom only in C3.
+--- docs/decisions/ADR-002-validation-protocol.md
+# ADR-002 — Validation protocol
+- Status: proposed
+- Date: 2026-09-24
+
+## Context
+- The visible `test.parquet` is copied from train → any score on it is leaked (identical spectra). Never tune on it.
+- Public LB = partial test, limited submissions → too noisy/slow to iterate on.
+- The test is timsTOF natural products; `enveda-np-examples` (250 molecules, 1,151 spectra) is the only same-instrument, same-pipeline NP set.
+
+## Decision
+- Query set: enveda-np-examples, grouped by molecule (ik14). Split frozen in `data/val_ik14.txt`, committed.
+- Three regimes per run:
+  - **C1**: reference = train minus enveda-np-examples rows.
+  - **C2**: reference = train minus all rows with the query ik14; pool keeps it.
+  - **C3**: C2 + drop the query ik14 from the pool.
+- Report MRR, Recall@cand, Recall@25 per regime + est. LB + runtime.
+- Anything trained (encoder, reranker) must exclude val ik14 from its training data. Reranker training queries: leave-structure-out from NP-rich libs (riken, gnps, msdial, mona, massbank), QTOF preferred.
+- Every run dumps its 20 worst molecules for failure analysis.
+
+## Known bias
+enveda-np compounds were chosen to be common → C1 here is optimistic vs the real test. Track deltas, trust the LB calibration for absolute level.
+
+## Revisit if
+Local est. LB and public LB move in opposite directions on two consecutive submissions.
+--- CLAUDE.md
+# CLAUDE.md — Standing rules for the implementer
+
+You are the **implementer** for the CASMI26 repo. Architecture decisions are made
+outside this repo and arrive as `plan.md`. Your job: execute `plan.md` exactly,
+measure honestly, report back in `handoff.md`.
+
+## Workflow (every session)
+1. Read `plan.md`, `docs/decisions.md`, the last 3 entries of `experiments/exp-log.md`.
+2. Implement only what `plan.md` scopes. Anything outside scope → write it under
+   "Open questions" in `handoff.md`; do not do it.
+3. Stop at each acceptance gate. If a gate fails, do not "fix forward" into the next
+   phase — record the failure and stop.
+4. Append every run to `experiments/exp-log.md` (format below), overwrite `handoff.md`.
+5. Commit with message `exp_NNN: <one line>`.
+
+## Hard rules
+- **Never** modify the frozen V27 artifacts (pool npz, FPNet checkpoints, GBDT rankers).
+  Wrap them; don't edit them.
+- **Never** make a keep/discard decision from n=60. n=60 is a smoke test only.
+  Decisions use the full validation set with paired bootstrap CIs (see Eval protocol).
+- **Never** tune on the test file. The test file's labels are unknown; the only
+  allowed use is label-free calibration (e.g. ppm offset), and it must be logged.
+- **Leak check is mandatory** on every run: `leak_hits` must be 0 or the run is invalid.
+- Every experiment has a config file in `configs/exp_NNN.yaml`. No magic numbers in code.
+- Deterministic: fixed seeds, sorted iteration, log the git hash in every result row.
+- If a run takes >2× the time `plan.md` estimates, stop and report, don't let it run overnight blind.
+
+## Eval protocol
+- Report per regime (C1 / C2 / C3): MRR, Recall@cand, Recall@25, n.
+- Report **paired bootstrap 95% CI of the delta vs the anchor** (1,000 resamples over
+  molecules). The anchor is named in `plan.md`.
+- A change "works" only if the CI lower bound of the target-regime delta is > 0 **and**
+  the C1 delta CI lower bound is > −0.01 (C1 non-inferiority).
+- Estimated LB uses the class weights in `docs/decisions.md`; always print them.
+
+## exp-log.md entry format
+```
+### exp_NNN — <title>
+- git: <hash>  config: configs/exp_NNN.yaml  anchor: exp_MMM
+- change: <one line>
+- n: C1=<n> C2=<n> C3=<n>
+- C1 MRR <x> (Δ <d> [lo, hi])   R@cand <x>  R@25 <x>
+- C2 MRR <x> (Δ <d> [lo, hi])   R@cand <x>  R@25 <x>
+- C3 MRR <x> (Δ <d> [lo, hi])   R@cand <x>  R@25 <x>
+- est LB: <x>   runtime: <per-molecule s, total>   leak_hits: 0
+- verdict: keep | discard | inconclusive — <reason vs gate>
+```
+
+## handoff.md format (overwrite each session)
+```
+## Done
+## Results table (copy of exp-log rows)
+## Gate status: PASS / FAIL (which gate, why)
+## Surprises / bugs found
+## Open questions for the planner
+```
