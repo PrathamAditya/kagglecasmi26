@@ -60,3 +60,16 @@ _, cnt = np.unique(G, return_counts=True)
 run(allc, 'BALANCED all features')
 an_cols = list(range(5, 14))
 run([c for c in allc if c not in an_cols], 'BALANCED no analog features')
+# append to diag_shortcut.py (after the BALANCED runs; reuses the last fitted model)
+m_bal = run(allc, 'BALANCED all (for gating)')
+def lvmax_per_group(X, gk):
+    return {k: X[gk == k, 2].max() for k in np.unique(gk)}   # col 2 = lvmax
+for T in (0.6, 0.7, 0.75, 0.8, 0.85, 0.9):
+    res = {}
+    for reg, (Xv, yv, gv, pv, _) in val.items():
+        s_new = m_bal.predict(Xv); lm = lvmax_per_group(Xv, gv)
+        use_v27 = np.array([lm[k] >= T for k in gv])
+        score = np.where(use_v27, pv + 10.0, s_new)   # +10 keeps V27 scores on one scale per group
+        res[reg] = mrr_by_group(score, yv, gv).mean()
+    print(f"gate T={T:.2f}   C1 {res['C1']:.4f}   C2 {res['C2']:.4f}")
+m_bal.booster_.save_model('artifacts/groups/ranker_v1_bal.txt')
