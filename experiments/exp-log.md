@@ -107,3 +107,10 @@ S03 → S05 is +0.014, which is within LB noise. The S05 patches aren't proven t
 - local: C1 0.883 (exp_021: 0.889) | C2 0.607 (exp_021: 0.599, Δ +0.0075 [+0.0014,+0.0158], paired bootstrap)
 - LB: PENDING
 - verdict: pending
+### exp_021c (a03): has_ref penalty on fixed pool — CLOSED
+- LB: 0.313 (vs anchor 0.334, vs fixed-pool-alone 0.315)
+- local: C1 0.883, C2 0.607 (Δ+0.0075 vs exp_021, CI [+0.0014,+0.0158])
+- verdict: discard. Local C2 gain did not transfer to LB — confirms patching frozen
+  ranker inputs is not the lever. Local C2 on our val set is not a reliable proxy for
+  hidden-set C2 when the ranker itself is untouched. exp_022 (retrain) is now the only
+  path forward.
