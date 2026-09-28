@@ -29,5 +29,4 @@ if __name__ == '__main__':
         if not np.array_equal(f, fps[i]): changed += 1
         fps[i] = f
     print(f"rows {len(new):,}  changed {changed:,}  parse-fail kept old {bad:,}")
-    np.savez_compressed('artifacts/v17_builder/pool_712k_fixedfp.npz',
-                        fp=fps, mass=z['mass'], keys=z['keys'], smiles=z['smiles'], nbits=z['nbits'])
+    np.savez_compressed('artifacts/v17_builder/pool_712k_fixedfp_recheck.npz', fp=fps, mass=z['mass'], keys=z['keys'], smiles=z['smiles'], nbits=z['nbits'])
