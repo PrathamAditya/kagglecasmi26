@@ -1,0 +1,48 @@
+exp_id: exp_016a
+description: exp016_v27 predictor, ORIGINAL pool (pool_712k_precomputed.npz) — actual LB target 0.315
+predictor:
+  name: exp016_v27
+  params:
+    pool_npz: artifacts/v17_builder/pool_712k_precomputed.npz
+    rankers: artifacts/v17_builder/rankers_v17_ensemble.joblib
+    fp_models: artifacts/fp_models
+    device: cpu
+    torch_threads: 0
+    ppm_offset: 1.2840695818908054
+    ppm_win: 8.5
+    ppm_fallback: 30.0
+    int_floor: 0.002
+    max_peaks: 256
+    mz_tol: 0.01
+    int_power: 1.0
+    ent_weight: true
+    analog_win: 200.0
+    n_analog: 100
+    sim_power: 4.0
+    topn: 25
+    min_da: 0.0018
+    frag_soft_cap: 34
+    frag_hard_cap: 80
+    max_abs_offset: 5.0
+    use_analog_fallback: false
+    frag_workers: 4
+    nfeat: 31
+    calib_n_sample: 150
+    calib_sim_thresh: 0.90
+    calib_search_ppm: 25.0
+    calib_seed: 0
+    calib_min_pairs: 20
+paths:
+  train: /home/amoeba/Desktop/enveda-CASMI26-molecule-id-mass-spectra/train.parquet
+  pool: /home/amoeba/Desktop/enveda-CASMI26-molecule-id-mass-spectra/pool.parquet
+  val_dir: data/val
+  cache_dir: cache
+  out_dir: experiments/exp_016a_pool_original/results
+diag: {ppm: 8.5, min_da: 0.0018}
+val:
+  lib: enveda-np-examples
+  max_precursor_ppm: 20
+  min_base_peak: 1000
+regimes: [C1, C2, C3]
+lb_weights: {C1: 0.5, C2: 0.35, C3: 0.15}
+kaggle: {train: auto, pool: auto}

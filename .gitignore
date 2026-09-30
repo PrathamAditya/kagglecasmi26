@@ -3,7 +3,7 @@ data/*
 !data/val_ids_v2.parquet        # frozen validation list: must be versioned
 
 # Frozen V27 artifacts from Kaggle (pool npz, FPNet, rankers, RDKit wheel)
-artifacts/
+artifacts/*
 
 # Caches and run outputs
 cache/
