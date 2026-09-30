@@ -245,7 +245,6 @@ Metric: rank of the true molecule among **3,280 validation molecules** (NOT the 
 | 14,000                   | 0.15378                       | 0.6182          | 0.16491  | 0.4813           | 0.5135           | 0.437 | 0.641 | 0.5672             |
 | 15,000                   | 0.15196                       | 0.6474          | 0.16718  | 0.4913           | 0.5382           | 0.463 | 0.669 | 0.5715             |
 | 20,000 (final)           | 0.14515                       | 0.6970          | 0.16847  | 0.5106           | 0.5733           | 0.501 | 0.695 | 0.5925             |
-Reading: model clearly learns (chance 0.0026 → 0.54). Train/val gap ≈ 0.11 MRR, not widening between the two evals. **Watch:** val loss rose 0.1649 → 0.1672 while probe loss fell — only two points; overfitting if val MRR flattens or drops while the probe keeps rising. NP proxy (0.572) vs overall (0.538) is inside the noise for 248 molecules.
 
 ## 6. Files used
 
