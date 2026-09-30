@@ -118,3 +118,40 @@ S03 → S05 is +0.014, which is within LB noise. The S05 patches aren't proven t
   ranker inputs is not the lever. Local C2 on our val set is not a reliable proxy for
   hidden-set C2 when the ranker itself is untouched. exp_022 (retrain) is now the only
   path forward.
+
+### Duplication bug investigation (2026-09-29) — session with Claude, UNRESOLVED
+
+- Diffing two submission CSVs (labelled 0.334 and 0.315 by user) found severe
+  candidate-list duplication in the 0.315 file for many molecules
+  (e.g. m_8d75c7: 2/25 unique SMILES, m_e5b5fa: 4/25; n_new=1, n_dropped up to
+  24 vs the 0.334 file — confirms duplication, not genuine reordering).
+- Ruled out: `_metric_unique_candidates`'s fallback (guards `if smi not in out`,
+  cannot itself produce literal duplicates) — confirmed against actual repo
+  code (src/casmi/predictors/exp016_v27.py), not just the notebook.
+- Ruled out: no per-molecule try/except with nearest-mass fallback exists
+  anywhere in exp016_v27.py. Earlier notes describing such a fallback in
+  "313_fixedfp_norefill" do not match any code found in the current repo —
+  either that code was never merged, or belongs to a notebook not yet located.
+- Ruled out: duplicate SMILES strings in the pool itself. Checked
+  pool_712k_fixedfp.npz directly — 712,199 distinct SMILES / 712,199 rows,
+  zero duplicates.
+- UNRESOLVED — config mismatch discovered late in session: the "0.315" CSV
+  we diffed was never confirmed against a specific exp_id/config. Investigation
+  conflated it with exp_021c (0.313, has_ref penalty) — but per exp-log.md,
+  0.315 should be the fixed-pool-alone run (exp_021, no penalty), a different
+  config. Has_ref-penalty code (ref_penalty_alpha/sim in exp016_v27.py) may be
+  entirely irrelevant to this bug. NEEDS CONFIRMATION: which exp_id/config
+  produced submission_0315.csv before resuming this thread.
+- Found (separate, real, unrelated bug): `_logits_raw` in exp016_v27.py
+  (~line 631-632) still has the pre-334_refill FPNet row-alignment bug —
+  drops empty peak lists without dropping matching metadata rows. Never
+  backported from the notebook fix that resolved it. Affects every experiment
+  run through exp016_v27, present-tense, including exp_021c.
+- Next step when resumed: confirm the config for submission_0315.csv, then
+  instrument the real predictor at the _metric_unique_candidates call site to
+  print `len(cand)` vs `len(set(cand.tolist()))` — checks whether duplication
+  starts upstream (four-channel merge produces repeated pool indices) or is
+  introduced during dedup itself.
+- Decision: parking this to start on own-FPNet build (see plan.md /
+  docs/decisions.md). Not blocking — FPNet validation uses the class-1/class-2
+  harness split, which does not depend on this bug being resolved.
