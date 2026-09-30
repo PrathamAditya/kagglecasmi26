@@ -289,4 +289,4 @@ Data/artifacts: `train.parquet` (competition), `artifacts/fpnet/fp_targets.npz`,
 4. Final config: retrain including the 250 `enveda-np-examples` molecules (upweighted); train the merged-spectrum variant (keep "merged" in the filename); optional small seed ensemble.
 5. Fix the alignment bug, then swap into V27 one change per submission; check the frozen ranker's feature distributions first (frozen ranker was trained on the old FPNet's outputs).
 6. Ranker retraining only after FPNet is solid, with class-stratified validation.
-7. DreaMS (later): confirm checkpoint loads in its own Python 3.11 env, add `--model dreams`, compare at matched steps (600 / 2,000 / 5,000).
+7. DreaMS (later): confirm checkpoint loads in its own Python 3.11 env, add `--model dreams`, compare at matched steps (600 / 2,000 / 5,000)
