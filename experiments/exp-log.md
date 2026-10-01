@@ -158,135 +158,68 @@ S03 → S05 is +0.014, which is within LB noise. The S05 patches aren't proven t
 
   # Own FPNet — build log and run `plain1` (2026-09-30)
 
-> Paste at the end of `experiments/exp-log.md`. Assign the next free `exp_id` (proposed run name: `plain1`).
-> Numbers below are copied from terminal output you pasted; anything not seen is marked **[fill in]**.
+# Exp-log: own FPNet vs DreaMS
 
-## 1. Why this experiment
+Updated 2026-10-02. exp_id: 001
 
-- V27 anchor 0.334 LB. Class 1 is solved by library match; the gap is class 2/3.
-- Frozen FPNet is a black box (no training code in repo, unknown training data, may have seen validation molecules).
-- Decision: **build our own FPNet first (plain baseline, trained on Modal); DreaMS fine-tuning comes later as a separate comparison.** Component swap only; V27 stays the fallback until our version wins on validated evidence.
-- FPNet is the one component the local harness can validate, because it never touches pool fingerprints.
+## Setup (same for all runs)
 
-## 2. Status at a glance
+- Data: 1,927,596 spectra (train 1,856,291 / val 71,305), 10 test adducts, ppm <= 10, base peak >= 1000
+- Eval: 20,000 val spectra = 3,280 molecules, chance MRR 0.0026, NP proxy = 248 molecules
+- Train: Modal A10G, bf16, batch 256, seed 0, BCE, AdamW wd 0.01, cosine to 10%
+- Warmup: 1,000 (20k runs), 500 (5k runs)
+- FPNet: 36.0M params, lr 3e-4, about 1,480 to 1,630 spec/s, 5.3 GB
+- DreaMS: 111.9M params (95.5M encoder), head lr 3e-4, backbone lr 5e-5, 100 peaks + precursor token, about 550 to 590 spec/s, 13.28 GB
 
-| Item                                            | State                                                                       |
-| ----------------------------------------------- | --------------------------------------------------------------------------- |
-| Architecture recovered + copied (`model.py`)    | done, trains and evaluates                                                  |
-| Fingerprint recipe verified against pool        | done, 0 mismatches / 3000                                                   |
-| Targets built                                   | done (269,846 molecules)                                                    |
-| Full prep                                       | done (1,927,596 spectra)                                                    |
-| Local smoke + overfit tests                     | done (pipeline works; overfit test only partial pass)                       |
-| Modal smoke                                     | done (setup works, ~1.3-2.9k spec/s)                                        |
-| **Run `plain1` (20,000 steps)**                 | **in progress; last seen step 15,000/20,000** — final numbers **[fill in]** |
-| Own vs frozen FPNet comparison (`eval_ckpt.py`) | **not run yet**                                                             |
-| Swap into V27 / harness comparison              | not started                                                                 |
+## Local scores (per-molecule MRR, same validation set)
 
-## 3. What we did, in order
+| Model                                  | Steps                           | Soft-Tanimoto MRR | Top-10 | Log-lik MRR | Top-10 | NP proxy          | Probe - val gap |
+| -------------------------------------- | ------------------------------- | ----------------- | ------ | ----------- | ------ | ----------------- | --------------- |
+| Own FPNet 20k (`plain1`)               | 20,000                          | 0.573             | 0.695  | 0.561       | 0.722  | 0.561 (log-lik)   | 0.124           |
+| Own FPNet 30k (`plain1_ext30k`)        | 30,000 (from 20k, LR restarted) | 0.617             | 0.733  | 0.603       | 0.756  | 0.571 (log-lik)   | 0.151           |
+| FPNet 5k (matched control, `fpnet_5k`) | 5,000                           | 0.1669            | 0.277  | not scored  |        | 0.3299 (soft-Tan) | 0.011           |
+| DreaMS 5k (`dreams_5k`)                | 5,000                           | 0.2911            | 0.422  | not scored  |        | 0.4197 (soft-Tan) | 0.042           |
+| DreaMS 20k (`dreams_20k`)              | 20,000                          | 0.5644            | 0.691  | not scored  |        | 0.5759 (soft-Tan) | 0.119           |
 
-1. **Recovered the FPNet architecture** from the two frozen checkpoints (`artifacts/fp_models/fp_merged_m1.pt`, `fp_single_s2.pt`): d=512, 6 layers, 6930 output bits, 36.0M parameters, trained 24,000 / 20,000 steps. The class itself exists only in the V27 notebook ("CELL 6 — FPNet verbatim"); `src/` has no FPNet class. Attention heads = 8 is **assumed** (default in the class; not stored in checkpoints).
-2. **Copied the class** to `src/casmi/fpnet/model.py` (same parameter names, so frozen weights load strictly). `check_fpnet_copy.py` (frozen-vs-copy equality) failed on an import at first and was **not re-run** — we chose to train first. Status: unverified equality.
-3. **Verified the fingerprint recipe** (`fp_recipe.py`, from `fix_pool_fps.py`: Morgan r2/4096 + Morgan r3/4096 + RDKit FP/2048 + MACCS/167, bit-selected by `fp_bits.npy`, packed to 867 bytes). `check_fp_recipe.py` on `pool_712k_fixedfp.npz` (712,199 rows): sampled 3000, parse failures 0, mismatches 0.
-4. **Built training targets** (`build_fp_targets.py`): 2,539,608 spectra / 275,810 structures in `train.parquet`; kept only the ten test adducts → 2,176,877 spectra / 269,846 structures; parse failures 0; 122 s; mean bit density 0.1289. Output `artifacts/fpnet/fp_targets.npz`.
+Own 20k / 30k: scored with `eval_ckpt.py`. FPNet 5k / DreaMS: in-training evaluation (soft-Tanimoto).
 
-   | adduct       | spectra   | molecules |
-   | ------------ | --------- | --------- |
-   | [M+H]+       | 1,324,585 | 243,970   |
-   | [M-H]-       | 465,688   | 98,485    |
-   | [M+Na]+      | 178,092   | 25,112    |
-   | [M+CH2O2-H]- | 83,188    | 20,723    |
-   | [M+NH4]+     | 53,452    | 8,890     |
-   | [M+Cl]-      | 27,511    | 7,148     |
-   | [M-H2O+H]+   | 21,682    | 5,594     |
-   | [M+K]+       | 18,955    | 4,335     |
-   | [M-2H2O+H]+  | 3,439     | 1,002     |
-   | [M-H2O-H]-   | 285       | 149       |
+## Matched 5,000 steps: per-molecule MRR (in-training eval)
 
-   Thin adducts: `[M-H2O-H]-` and `[M-2H2O+H]+`. Dropped: dimers etc. (~340k spectra) — not in test.
+| Step  | DreaMS | FPNet  | Lead   |
+| ----- | ------ | ------ | ------ |
+| 1,000 | 0.0758 | 0.0224 | +0.053 |
+| 2,000 | 0.1600 | 0.0517 | +0.108 |
+| 3,000 | 0.2342 | 0.1081 | +0.126 |
+| 4,000 | 0.2805 | 0.1409 | +0.140 |
+| 5,000 | 0.2911 | 0.1669 | +0.124 |
 
-5. **Wrote data prep** (`data.py`, `prep.py`): peak cleaning identical to the notebook (`prep_peaks`: drop > precursor+1.5 Da, 0.1% floor, ≤128 peaks with 8 per 50 Da window, sqrt intensities), plus label-quality filters (|precursor ppm| ≤ 10, raw base peak ≥ 1000 — both mirror how the test set was cleaned). Validation = all molecules of `enveda-np-examples` + 1.5% hash-chosen molecules, held out **across all libraries** (by `inchikey14`).
-6. **Local GPU:** the project's torch was a CPU-only build (`2.14.0+cpu`). Installed a CUDA build into the venv only (`uv pip install --reinstall-package torch --torch-backend cu130 torch`); always run with `uv run --no-sync` so the lock file doesn't revert it. GTX 1650 ≈ 70 spectra/s (fp32, batch 32).
-7. **Small prep** (`--limit 200000`): reached only `enveda-180` + `drug_plus` (file is sorted by library): 143,291 spectra kept (val 2,311), 20 s. Smoke test 200 steps: loss plateau 0.243 = bit-frequency level, per-molecule MRR 0.0130 vs chance 0.0128 (nothing learned yet, expected).
-8. **Added diagnostics** to `train.py`: train-probe (same size as validation but from training molecules), chance level, per-molecule MRR (average logits over a molecule's spectra), natural-product proxy (holdout-library molecules), and a prior-only baseline printed once at start.
-9. **Overfit test** (`--train-subset 2000`, 600 steps, batch 32): train-probe MRR 0.0136 → 0.0210 → 0.0279 (steps 200/400/600) while validation MRR stayed 0.0146 → 0.0178 → 0.0188; probe loss 0.2416 → 0.2310, validation loss flat ≈ 0.241. Verdict: partial pass — spectra reach the model and the probe detects memorization, but memorizing was slow (target was probe loss < ~0.15).
-10. **Full prep** (315 s) → `artifacts/fpnet_data`:
-    - Candidates (test adduct + known structure) 2,176,877. Dropped: precursor ppm > 10 → 172,924 (7.9%); base peak < 1000 → 70,537 (3.2%); no peaks left → 5,820.
-    - **Kept 1,927,596 spectra** (train 1,856,291 / val 71,305), 266,850 molecules, mean 46.3 peaks/spectrum; 153,822 kept spectra have < 5 peaks.
-    - Missing collision energy (set to 25 eV; `--drop-null-ce` NOT used because it would remove all of `gnps`): gnps 124,427; spectraverse 42,994; riken 19,793; msdial 14,976; mona 12,575; drug_plus 2,390; massbank 973; masaryk 650 (total 218,778 = 11%).
-    - Spectra per library: enveda-180 821,960; pluskal_ms2 472,353; riken 245,646; gnps 124,427; massbank 89,828; mona 85,228; spectraverse 46,839; msdial 37,093; drug_plus 2,390; enveda-np-examples 1,182; masaryk 650.
-11. **Modal smoke** (app `ap-pKGFIug5xD48imVjz4qJIY`, 300 steps, A10G): image build, volume, imports, data, eval, checkpointing all OK; 1,301-2,879 spec/s; per-molecule MRR 0.0030 vs chance 0.0026 (learning rate never left warmup — expected).
-12. **Run `plain1`** launched on Modal (details below).
+## Leaderboard
 
-## 4. Config of `plain1`
+| Submission                 | Model            | Pool     | Public LB |
+| -------------------------- | ---------------- | -------- | --------- |
+| V27 anchor                 | frozen FPNet     | original | 0.334     |
+| Fork (c01c30)              | frozen FPNet     | original | 0.344     |
+| Fixed pool alone           | frozen FPNet     | fixed    | 0.315     |
+| Own FPNet 20k              | own 20k          | original | 0.272     |
+| Own FPNet 30k              | own 30k          | original | 0.271     |
+| Own FPNet 20k + fixed pool | own 20k          | fixed    | 0.266     |
+| DreaMS 5k                  | dreams_fp_5k.pt  | fixed    |           |
+| DreaMS 20k                 | dreams_fp_20k.pt |          |           |
 
-|               |                                                                                                                                                                                        |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Model         | FPNet, d=512, 6 layers, 8 heads (assumed), dropout 0.1, 36.0M params, 6930 outputs                                                                                                     |
-| Loss          | BCE with logits, mean over bits and batch                                                                                                                                              |
-| Optimizer     | AdamW, betas (0.9, 0.999), weight decay 0.01 (matrices only), grad clip 1.0                                                                                                            |
-| LR            | peak 3e-4, linear warmup 1,000 steps, cosine to 10% (3e-5) at step 20,000                                                                                                              |
-| Batch / steps | 256 / 20,000 (≈5.1M samples ≈ 2.8 passes over 1.86M train spectra)                                                                                                                     |
-| Precision     | bf16 autocast (loss in fp32)                                                                                                                                                           |
-| Sampling      | uniform over spectra; `lib_weights` none, `mol_balance` 0, `instr_dropout` 0                                                                                                           |
-| Prep filters  | adducts = ten test adducts; ppm ≤ 10; base peak ≥ 1000; min peaks 1; null CE → 25 eV                                                                                                   |
-| Validation    | 71,305 spectra of 3,4xx molecules (1.5% hash + enveda-np-examples); evaluation samples 20,000 spectra = 3,280 molecules, every 1,000 steps; best checkpoint chosen by per-molecule MRR |
-| Hardware      | Modal A10G, 8 CPU, 32 GB, 6 loader workers; ≈ 1,630 spec/s steady                                                                                                                      |
-| Seed / resume | seed 0; resumable (`last_state.pt` every 500 steps + at each eval)                                                                                                                     |
+## Artifacts
 
-Launch: `modal run --detach src/scripts/modal_fpnet.py --stage train --run-name plain1`
-Outputs on volume `casmi-fpnet-vol`: `/runs/plain1/fpnet_own_best.pt`, `fpnet_own_final.pt`, `last_state.pt`.
+| Model         | Modal run             | Kaggle file                                                     |
+| ------------- | --------------------- | --------------------------------------------------------------- |
+| Own FPNet 20k | `/runs/plain1`        | `fp_own_20k_single.pt` in `prathamaditya/casmi26-fpnet-own-20k` |
+| Own FPNet 30k | `/runs/plain1_ext30k` | `fp_own_30k_single.pt` in `prathamaditya/casmi26-fpnet-own-20k` |
+| FPNet 5k      | `/runs/fpnet_5k`      | not uploaded                                                    |
+| DreaMS 5k     | `/runs/dreams_5k`     | `dreams_fp_5k.pt` in `prathamaditya/casmi26-dreams-5k-20k`      |
+| DreaMS 20k    | `/runs/dreams_20k`    | `dreams_fp_20k.pt` in `prathamaditya/casmi26-dreams-5k-20k`     |
 
-## 5. Results so far (evaluations I have seen)
+Loader file for both DreaMS models: `dreams_fp_infer.py` (same dataset).
 
-Metric: rank of the true molecule among **3,280 validation molecules** (NOT the 712k pool — do not compare with the leaderboard). Chance MRR ≈ 0.0026.
+## Open
 
-| step                     | train-probe loss              | train-probe MRR | val loss | per-spectrum MRR | per-molecule MRR | top1  | top10 | NP proxy (248 mol) |
-| ------------------------ | ----------------------------- | --------------- | -------- | ---------------- | ---------------- | ----- | ----- | ------------------ |
-| 14,000                   | 0.15378                       | 0.6182          | 0.16491  | 0.4813           | 0.5135           | 0.437 | 0.641 | 0.5672             |
-| 15,000                   | 0.15196                       | 0.6474          | 0.16718  | 0.4913           | 0.5382           | 0.463 | 0.669 | 0.5715             |
-| 20,000 (final)           | **[fill in]**                 |                 |          |                  |                  |       |       |                    |
-| earlier evals (1k-13k)   | **[fill in from Modal log]**  |                 |          |                  |                  |       |       |                    |
-| PRIOR-ONLY BASELINE line | **[fill in from top of log]** |                 |          |                  |                  |       |       |                    |
-
-Reading: model clearly learns (chance 0.0026 → 0.54). Train/val gap ≈ 0.11 MRR, not widening between the two evals. **Watch:** val loss rose 0.1649 → 0.1672 while probe loss fell — only two points; overfitting if val MRR flattens or drops while the probe keeps rising. NP proxy (0.572) vs overall (0.538) is inside the noise for 248 molecules.
-
-## 6. Files used
-
-All under `src/`. Sizes are approximate (each 1 byte less after download).
-
-| File                                | Role                                                 | Status                                                                                             |
-| ----------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `casmi/fpnet/model.py` (3.9 KB)     | FPNet architecture (copy of notebook CELL 6)         | used by all training/eval                                                                          |
-| `casmi/fpnet/fp_recipe.py` (1.7 KB) | SMILES → 6930-bit packed fingerprint                 | verified vs pool                                                                                   |
-| `casmi/fpnet/data.py` (4.8 KB)      | peak cleaning, batching, `SpecData`                  | ran on real data                                                                                   |
-| `casmi/fpnet/prep.py` (8.0 KB)      | train.parquet → compact arrays + filters + val split | ran on real data                                                                                   |
-| `casmi/fpnet/train.py` (~15 KB)     | training loop, eval, probes, prior baseline          | ran locally + Modal; **confirm version used for plain1 (14,965 B = includes prior-only baseline)** |
-| `scripts/build_fp_targets.py`       | fingerprints for all training structures             | ran                                                                                                |
-| `scripts/check_fp_recipe.py`        | recipe check vs pool                                 | ran, passed                                                                                        |
-| `scripts/check_fpnet_copy.py`       | frozen-vs-copy equality                              | **not run successfully**                                                                           |
-| `scripts/modal_fpnet.py`            | Modal prep/smoke/train                               | ran (smoke + plain1)                                                                               |
-| `scripts/eval_ckpt.py`              | score any checkpoint on our exact validation split   | **written, not yet run**                                                                           |
-
-Data/artifacts: `train.parquet` (competition), `artifacts/fpnet/fp_targets.npz`, `artifacts/fpnet_data/` (full prep), `artifacts/fpnet_data_small/` (test only), `artifacts/coconut_candidates/fp_bits.npy`, `artifacts/v17_builder/pool_712k_fixedfp.npz`, frozen weights in `artifacts/fp_models/`, Modal volume `casmi-fpnet-vol`.
-
-## 7. Issues, gotchas, open questions
-
-- A wrong file was once saved as `fp_recipe.py` (it was `build_fp_targets.py`); fixed. Check `wc -c` after copying files.
-- `resume` ignores changed settings: use a fresh `--out-dir` / run name per experiment.
-- Local torch was CPU-only; use `uv run --no-sync` with the CUDA build.
-- Row-alignment bug in the FPNet inference path (notebook `_logits_from` uses `rows[:B]` after dropping empty spectra; project notes place it near `_logits_raw` in `exp016_v27.py`, ~line 631). Not fixed. Fix before any harness comparison or swap.
-- `exp016_v27.py` in the repo contains no FPNet class (grep for `qkv` found nothing) → where the harness gets FPNet from is unconfirmed.
-- Data page says "one of the seven above" but lists ten adducts; we use ten.
-- Frozen FPNet may have trained on our validation molecules (its number = upper bound).
-- Only 248 natural-product proxy molecules → wide confidence intervals; local MRR (3,280 candidates) cannot predict the leaderboard. Local wins misled twice before (pool swap, `has_ref` penalty).
-- COCONUT is not used in training (structures only, no spectra); it enters at inference via the candidate pool.
-
-## 8. Next steps
-
-1. Let `plain1` finish; record final table above; download `fpnet_own_best.pt`.
-2. Run `eval_ckpt.py` on ours + `fp_single_s2.pt` + `fp_merged_m1.pt` (also serves as the bit-order check: frozen near chance = bit order/input mismatch).
-3. Ablations, one change each, same steps, two seeds for a noise estimate: cosine/soft-Tanimoto loss, natural-product `lib_weights`, `instr_dropout 0.3`, `mol_balance 0.5`, m/z-jitter + peak-dropout augmentation, looser ppm filter (20-30), "unknown CE" marker instead of 25 eV, longer training, peak LR 1e-4 / 6e-4. Judge on per-molecule MRR and the NP proxy with bootstrap CIs.
-4. Final config: retrain including the 250 `enveda-np-examples` molecules (upweighted); train the merged-spectrum variant (keep "merged" in the filename); optional small seed ensemble.
-5. Fix the alignment bug, then swap into V27 one change per submission; check the frozen ranker's feature distributions first (frozen ranker was trained on the old FPNet's outputs).
-6. Ranker retraining only after FPNet is solid, with class-stratified validation.
-7. DreaMS (later): confirm checkpoint loads in its own Python 3.11 env, add `--model dreams`, compare at matched steps (600 / 2,000 / 5,000)
+- Adapter vs DreaMS preprocessing: 15 of 300 spectra differ; tie check output not seen
+- `_logits_from` row-alignment bug present in the notebook (all swaps)
+- DreaMS not scored under log-likelihood scorer
