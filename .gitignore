@@ -20,3 +20,5 @@ __pycache__/
 .kaggle/
 kaggle.json
 access_token
+# Root-level text files (run outputs, logs)
+/*.txt
