@@ -160,7 +160,7 @@ S03 → S05 is +0.014, which is within LB noise. The S05 patches aren't proven t
 
 # Exp-log: own FPNet vs DreaMS
 
-Updated 2026-10-02. exp_id: 001
+Updated 2026-10-02. exp_id: 0001
 
 ## Setup (same for all runs)
 
@@ -203,8 +203,8 @@ Own 20k / 30k: scored with `eval_ckpt.py`. FPNet 5k / DreaMS: in-training evalua
 | Own FPNet 20k              | own 20k          | original | 0.272     |
 | Own FPNet 30k              | own 30k          | original | 0.271     |
 | Own FPNet 20k + fixed pool | own 20k          | fixed    | 0.266     |
-| DreaMS 5k                  | dreams_fp_5k.pt  | fixed    |           |
-| DreaMS 20k                 | dreams_fp_20k.pt |          |           |
+| DreaMS 5k                  | dreams_fp_5k.pt  | fixed    | 0.279     |
+| DreaMS 20k                 | dreams_fp_20k.pt | fixed    | 0.299     |
 
 ## Artifacts
 
