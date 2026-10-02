@@ -156,7 +156,7 @@ S03 → S05 is +0.014, which is within LB noise. The S05 patches aren't proven t
   docs/decisions.md). Not blocking — FPNet validation uses the class-1/class-2
   harness split, which does not depend on this bug being resolved.
 
-  # Own FPNet — build log and run `plain1` (2026-09-30)
+# Own FPNet — build log and run `plain1` (2026-09-30)
 
 # Exp-log: own FPNet vs DreaMS
 
