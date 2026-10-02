@@ -1,0 +1,279 @@
+"""Step 4: train our own FPNet (spectrum -> 6930 fingerprint bits).
+
+Plain version: same architecture as the frozen FPNet, single-spectrum inputs, BCE loss,
+uniform sampling over training spectra (optionally weighted per library).
+All hyperparameters below are starting guesses, NOT tuned.
+
+Local smoke test (few minutes, proves the pipeline runs and the loss goes down):
+  uv run python -m casmi.fpnet.train --data-dir artifacts/fpnet_data_small --targets artifacts/fpnet/fp_targets.npz \
+      --out-dir artifacts/fpnet_runs/smoke --steps 200 --batch-size 32 --workers 0 --amp none --eval-every 100 --max-val-spectra 2000
+"""
+import argparse
+import math
+import os
+import time
+
+import numpy as np
+import torch
+import torch.nn.functional as F
+import torch.utils.data
+
+from casmi.fpnet.data import NBITS, SpecData, make_batch, unpack_targets
+from casmi.fpnet.model import FPNet
+
+
+class StepBatches(torch.utils.data.Dataset):
+    """Item i = the batch for step (start_step + i); deterministic given (seed, step), so resume is clean."""
+
+    def __init__(self, D, fp, train_idx, cdf, batch_size, n_steps, start_step, seed, instr_dropout=0.0):
+        self.D, self.fp, self.train_idx, self.cdf = D, fp, train_idx, cdf
+        self.instr_dropout = instr_dropout
+        self.B, self.n, self.start, self.seed = batch_size, n_steps, start_step, seed
+
+    def __len__(self):
+        return self.n
+
+    def __getitem__(self, i):
+        rng = np.random.default_rng([self.seed, self.start + i])
+        pos = np.minimum(np.searchsorted(self.cdf, rng.random(self.B), side="right"), len(self.train_idx) - 1)
+        idx = self.train_idx[pos]
+        b = make_batch(self.D, idx)
+        if self.instr_dropout > 0:   # hide the instrument label on a random share of spectra (4 = 'other')
+            b["ins"] = np.where(rng.random(self.B) < self.instr_dropout, 4, b["ins"])
+        b["y"] = unpack_targets(self.fp, self.D.mol[idx])
+        return {k: torch.from_numpy(v) for k, v in b.items()}
+
+
+def to_dev(b, dev):
+    return {k: v.to(dev, non_blocking=True) for k, v in b.items()}
+
+
+def forward(model, b):
+    return model(b["mz"], b["it"], b["pad"], b["prec"], b["ad"], b["ins"], b["ce"], b["mode"])
+
+
+@torch.no_grad()
+def evaluate(model, D, fp, val_idx, cand_mols, dev, amp_dtype, bs=256):
+    """val loss + a retrieval proxy: rank the true molecule among ALL validation molecules by
+    soft-Tanimoto between predicted probabilities and each candidate's true fingerprint.
+    This is a cheap proxy, NOT the real harness."""
+    model.eval()
+    cand_fp = torch.from_numpy(unpack_targets(fp, cand_mols)).to(dev)             # (M, 6930)
+    cand_hold = np.zeros(len(cand_mols), bool)   # candidates that are holdout-library (natural-product proxy) molecules
+    cand_hold[np.searchsorted(cand_mols, D.mol[val_idx])] = D.is_holdout[val_idx]
+    cand_sum = cand_fp.sum(1)[None]
+    pos_of = {int(m): i for i, m in enumerate(cand_mols)}
+    tot_loss, n, rr, top1, top10 = 0.0, 0, 0.0, 0, 0
+    msum = torch.zeros(len(cand_mols), NBITS, device=dev)   # per-molecule logit sums
+    mcnt = torch.zeros(len(cand_mols), device=dev)
+    for s in range(0, len(val_idx), bs):
+        idx = val_idx[s:s + bs]
+        b = make_batch(D, idx)
+        y = torch.from_numpy(unpack_targets(fp, D.mol[idx])).to(dev)
+        b = to_dev({k: torch.from_numpy(v) for k, v in b.items()}, dev)
+        with torch.autocast(device_type=dev.type, dtype=amp_dtype, enabled=amp_dtype is not None):
+            logits = forward(model, b)
+        logits = logits.float()
+        tot_loss += F.binary_cross_entropy_with_logits(logits, y, reduction="sum").item()
+        p = torch.sigmoid(logits)
+        inter = p @ cand_fp.T
+        score = inter / (p.sum(1, keepdim=True) + cand_sum - inter + 1e-6)          # (B, M)
+        true_pos = torch.tensor([pos_of[int(m)] for m in D.mol[idx]], device=dev)
+        true_score = score.gather(1, true_pos[:, None])
+        rank = (score > true_score).sum(1) + 1
+        msum.index_add_(0, true_pos, logits)
+        mcnt.index_add_(0, true_pos, torch.ones(len(idx), device=dev))
+        rr += (1.0 / rank.float()).sum().item()
+        top1 += (rank <= 1).sum().item()
+        top10 += (rank <= 10).sum().item()
+        n += len(idx)
+    # molecule level (this mirrors the competition: many spectra per molecule, one answer per molecule)
+    pm = torch.sigmoid(msum / mcnt[:, None].clamp(min=1))
+    inter = pm @ cand_fp.T
+    score = inter / (pm.sum(1, keepdim=True) + cand_sum - inter + 1e-6)
+    mrank = (score > score.diagonal()[:, None]).sum(1) + 1   # candidate i IS molecule i (cand_mols sorted, unique)
+    inv_rank = 1.0 / mrank.float()
+    M = len(cand_mols)
+    hold_mask = torch.from_numpy(cand_hold).to(dev)
+    model.train()
+    return dict(val_loss=tot_loss / (n * NBITS), mrr=rr / n, top1=top1 / n, top10=top10 / n,
+                mol_mrr=inv_rank.mean().item(), mol_top1=(mrank <= 1).float().mean().item(),
+                mol_top10=(mrank <= 10).float().mean().item(), n_val=n, n_cand=M,
+                chance_mrr=float((1.0 / np.arange(1, M + 1)).sum() / M),   # MRR of random guessing
+                hold_mrr=inv_rank[hold_mask].mean().item() if cand_hold.any() else None,
+                n_hold=int(cand_hold.sum()))
+
+
+@torch.no_grad()
+def prior_baseline(D, fp, val_idx, cand_mols, train_idx, dev):
+    """MRR of a 'model' that ignores the spectrum and always predicts the average training fingerprint.
+    Early in training our model is basically this, and typical-looking molecules already rank well under it,
+    so a trained model must beat THIS number, not just the random-chance number."""
+    rng = np.random.default_rng(2)
+    tr_mols = np.unique(D.mol[train_idx])
+    smp = rng.choice(tr_mols, size=min(10000, len(tr_mols)), replace=False)
+    prior = torch.from_numpy(unpack_targets(fp, smp).mean(0)).to(dev)              # (6930,)
+    cand_fp = torch.from_numpy(unpack_targets(fp, cand_mols)).to(dev)              # (M, 6930)
+    inter = cand_fp @ prior
+    s = inter / (prior.sum() + cand_fp.sum(1) - inter + 1e-6)                      # (M,)
+    inv = 1.0 / ((s[None, :] > s[:, None]).sum(1) + 1).float()                     # rank of each candidate
+    hold = np.zeros(len(cand_mols), bool)
+    hold[np.searchsorted(cand_mols, D.mol[val_idx])] = D.is_holdout[val_idx]
+    hm = inv[torch.from_numpy(hold).to(dev)].mean().item() if hold.any() else None
+    return inv.mean().item(), hm
+
+
+def save_compat(path, model, step, layers, d):
+    """Same keys as the frozen checkpoints, so existing loading code reads it unchanged."""
+    torch.save({"model": model.state_dict(), "step": step, "nbits": NBITS, "d": d, "layers": layers}, path)
+
+
+def run(cfg, on_save=None):
+    torch.manual_seed(cfg["seed"])
+    dev = torch.device(cfg["device"] if cfg["device"] != "auto" else ("cuda" if torch.cuda.is_available() else "cpu"))
+    amp_dtype = {"bf16": torch.bfloat16, "fp16": torch.float16, "none": None}[cfg["amp"]]
+    if dev.type == "cpu":
+        amp_dtype = None
+    os.makedirs(cfg["out_dir"], exist_ok=True)
+
+    D = SpecData(cfg["data_dir"])
+    fp = np.load(cfg["targets"], allow_pickle=True)["fp"]
+    train_idx = np.where(~D.is_val)[0]
+    val_all = np.where(D.is_val)[0]
+    if len(val_all) == 0 or len(train_idx) == 0:
+        raise SystemExit(f"need both train and validation spectra (train {len(train_idx)}, val {len(val_all)}); re-run prep with more rows or a larger --val-frac")
+    if cfg["train_subset"] > 0:   # debugging only: train on a tiny random subset to check the model CAN memorise
+        train_idx = np.sort(np.random.default_rng(1).choice(train_idx, size=min(cfg["train_subset"], len(train_idx)), replace=False))
+    rng = np.random.default_rng(0)
+    val_idx = np.sort(rng.choice(val_all, size=min(cfg["max_val_spectra"], len(val_all)), replace=False))
+    cand_mols = np.unique(D.mol[val_idx])
+    print(f"device {dev} | spectra {D.n:,} | train {len(train_idx):,} | val sampled {len(val_idx):,} "
+          f"({len(cand_mols):,} val molecules)", flush=True)
+
+    try:   # informational only: a failure here must never stop training
+        pm, ph = prior_baseline(D, fp, val_idx, cand_mols, train_idx, dev)
+        print(f"PRIOR-ONLY BASELINE (ignores the spectrum): per-molecule MRR {pm:.4f}"
+              + (f" | natural-product proxy {ph:.4f}" if ph is not None else "")
+              + f" | random chance {float((1.0 / np.arange(1, len(cand_mols) + 1)).sum() / len(cand_mols)):.4f}", flush=True)
+    except Exception as e:
+        print("prior baseline skipped:", repr(e), flush=True)
+
+    # training-side probe: same number of molecules/spectra as validation, but from TRAINING molecules.
+    # Comparing its score with validation (same metric, same chance level) shows memorisation vs generalisation.
+    tr_mols = np.unique(D.mol[train_idx])
+    pick = rng.choice(tr_mols, size=min(len(cand_mols), len(tr_mols)), replace=False)
+    pool = train_idx[np.isin(D.mol[train_idx], pick)]
+    probe_idx = np.sort(rng.choice(pool, size=min(len(val_idx), len(pool)), replace=False))
+    probe_mols = np.unique(D.mol[probe_idx])
+
+    # per-library sampling weights (default 1.0 each = uniform over spectra)
+    lw = np.ones(len(D.lib_names))
+    for kv in filter(None, cfg["lib_weights"].split(",")):
+        k, v = kv.split("=")
+        lw[D.lib_names.index(k)] = float(v)
+    w = lw[D.lib[train_idx]]
+    if cfg["mol_balance"] > 0:   # molecules with many spectra get down-weighted per spectrum
+        cnt = np.bincount(D.mol[train_idx])
+        w = w / np.maximum(cnt[D.mol[train_idx]], 1) ** cfg["mol_balance"]
+    cdf = np.cumsum(w) / w.sum()
+    cdf[-1] = 1.0
+
+    model = FPNet(NBITS, d=cfg["d"], layers=cfg["layers"]).to(dev)
+    print(f"parameters: {sum(p.numel() for p in model.parameters()) / 1e6:.1f}M", flush=True)
+    decay = [p for p in model.parameters() if p.ndim >= 2]
+    no_decay = [p for p in model.parameters() if p.ndim < 2]
+    opt = torch.optim.AdamW([{"params": decay, "weight_decay": cfg["wd"]}, {"params": no_decay, "weight_decay": 0.0}],
+                            lr=cfg["lr"], betas=(0.9, 0.999))
+    scaler = torch.amp.GradScaler("cuda", enabled=(amp_dtype == torch.float16))
+
+    def lr_at(step):
+        if step < cfg["warmup"]:
+            return cfg["lr"] * (step + 1) / cfg["warmup"]
+        prog = (step - cfg["warmup"]) / max(1, cfg["steps"] - cfg["warmup"])
+        return cfg["lr"] * (0.1 + 0.9 * 0.5 * (1 + math.cos(math.pi * min(1.0, prog))))
+
+    step, best = 0, -1.0
+    state_path = os.path.join(cfg["out_dir"], "last_state.pt")
+    if cfg["resume"] and os.path.exists(state_path):
+        st = torch.load(state_path, map_location="cpu", weights_only=False)
+        model.load_state_dict(st["model"]); opt.load_state_dict(st["opt"])
+        step, best = st["step"], st.get("best", -1.0)
+        print(f"resumed from step {step}", flush=True)
+
+    def save_state():
+        tmp = state_path + ".tmp"
+        torch.save({"model": model.state_dict(), "opt": opt.state_dict(), "step": step, "best": best}, tmp)
+        os.replace(tmp, state_path)
+        if on_save:
+            on_save()
+
+    todo = cfg["steps"] - step
+    if todo <= 0:
+        print("nothing to do (already at target steps)")
+        return
+    ds = StepBatches(D, fp, train_idx, cdf, cfg["batch_size"], todo, step, cfg["seed"], cfg["instr_dropout"])
+    nw = cfg["workers"]
+    dl = torch.utils.data.DataLoader(ds, batch_size=None, shuffle=False, num_workers=nw,
+                                     prefetch_factor=4 if nw > 0 else None, persistent_workers=nw > 0)
+    model.train()
+    t0 = time.time()
+    run_loss, run_n = 0.0, 0
+    for batch in dl:
+        b = to_dev(batch, dev)
+        for g in opt.param_groups:
+            g["lr"] = lr_at(step)
+        with torch.autocast(device_type=dev.type, dtype=amp_dtype, enabled=amp_dtype is not None):
+            logits = forward(model, b)
+        loss = F.binary_cross_entropy_with_logits(logits.float(), b["y"])
+        opt.zero_grad(set_to_none=True)
+        scaler.scale(loss).backward()
+        scaler.unscale_(opt)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        scaler.step(opt); scaler.update()
+        step += 1
+        run_loss += loss.item(); run_n += 1
+
+        if step % cfg["log_every"] == 0:
+            el = time.time() - t0
+            print(f"step {step}/{cfg['steps']} loss {run_loss / run_n:.5f} lr {lr_at(step):.2e} "
+                  f"{run_n * cfg['batch_size'] / max(el, 1e-9):.0f} spec/s (since last log {el:.0f}s)", flush=True)
+            run_loss, run_n, t0 = 0.0, 0, time.time()
+        if step % cfg["eval_every"] == 0 or step == cfg["steps"]:
+            r = evaluate(model, D, fp, val_idx, cand_mols, dev, amp_dtype)
+            rp = evaluate(model, D, fp, probe_idx, probe_mols, dev, amp_dtype)
+            print(f"  TRAIN-PROBE step {step}: loss {rp['val_loss']:.5f} | per-MOLECULE MRR {rp['mol_mrr']:.4f} "
+                  f"(chance {rp['chance_mrr']:.4f}, {rp['n_cand']:,} training molecules)", flush=True)
+            print(f"  EVAL step {step}: val_loss {r['val_loss']:.5f} | per-spectrum MRR {r['mrr']:.4f} top1 {r['top1']:.3f} "
+                  f"top10 {r['top10']:.3f} | per-MOLECULE MRR {r['mol_mrr']:.4f} top1 {r['mol_top1']:.3f} "
+                  f"top10 {r['mol_top10']:.3f} (chance {r['chance_mrr']:.4f}; {r['n_cand']:,} val molecules, {r['n_val']:,} spectra)", flush=True)
+            if r["hold_mrr"] is not None:
+                print(f"  EVAL natural-product proxy (holdout-library molecules): MRR {r['hold_mrr']:.4f} "
+                      f"on {r['n_hold']:,} molecules", flush=True)
+            if r["mol_mrr"] > best:
+                best = r["mol_mrr"]
+                save_compat(os.path.join(cfg["out_dir"], "fpnet_own_best.pt"), model, step, cfg["layers"], cfg["d"])
+                print(f"  saved fpnet_own_best.pt (molecule MRR {best:.4f})", flush=True)
+            save_state()
+            t0 = time.time()
+        elif step % cfg["save_every"] == 0:
+            save_state()
+    save_compat(os.path.join(cfg["out_dir"], "fpnet_own_final.pt"), model, step, cfg["layers"], cfg["d"])
+    save_state()
+    print("finished; wrote fpnet_own_final.pt", flush=True)
+
+
+def default_cfg():
+    return dict(data_dir="", targets="", out_dir="", steps=20000, batch_size=256, lr=3e-4, warmup=1000, wd=0.01,
+                d=512, layers=6, seed=0, device="auto", amp="bf16", workers=4, eval_every=1000, save_every=500,
+                log_every=100, max_val_spectra=20000, lib_weights="", resume=True, instr_dropout=0.0, mol_balance=0.0, train_subset=0)
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+    c = default_cfg()
+    for k, v in c.items():
+        if isinstance(v, bool):
+            ap.add_argument("--" + k.replace("_", "-"), type=lambda s: s.lower() in ("1", "true", "yes"), default=v)
+        else:
+            ap.add_argument("--" + k.replace("_", "-"), type=type(v) if v != "" else str, default=v)
+    run(vars(ap.parse_args()))
