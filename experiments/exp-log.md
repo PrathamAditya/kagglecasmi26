@@ -156,11 +156,13 @@ S03 → S05 is +0.014, which is within LB noise. The S05 patches aren't proven t
   docs/decisions.md). Not blocking — FPNet validation uses the class-1/class-2
   harness split, which does not depend on this bug being resolved.
 
-  # Own FPNet — build log and run `plain1` (2026-09-30)
+# Own FPNet — build log and run `plain1` (2026-09-30)
 
 # Exp-log: own FPNet vs DreaMS
 
-Updated 2026-10-02. exp_id: 001
+created 2026-10-01
+Updated 2026-10-02
+exp_id: 0001
 
 ## Setup (same for all runs)
 
@@ -178,8 +180,10 @@ Updated 2026-10-02. exp_id: 001
 | Own FPNet 20k (`plain1`)               | 20,000                          | 0.573             | 0.695  | 0.561       | 0.722  | 0.561 (log-lik)   | 0.124           |
 | Own FPNet 30k (`plain1_ext30k`)        | 30,000 (from 20k, LR restarted) | 0.617             | 0.733  | 0.603       | 0.756  | 0.571 (log-lik)   | 0.151           |
 | FPNet 5k (matched control, `fpnet_5k`) | 5,000                           | 0.1669            | 0.277  | not scored  |        | 0.3299 (soft-Tan) | 0.011           |
-| DreaMS 5k (`dreams_5k`)                | 5,000                           | 0.2911            | 0.422  | not scored  |        | 0.4197 (soft-Tan) | 0.042           |
-| DreaMS 20k (`dreams_20k`)              | 20,000                          | 0.5644            | 0.691  | not scored  |        | 0.5759 (soft-Tan) | 0.119           |
+| DreaMS 5k                              | 5,000                           | 0.2911            | 0.422  | not scored  |        | 0.4197 (soft-Tan) | 0.042           |
+| DreaMS 20k                             | 20,000                          | 0.5644            | 0.691  | not scored  |        | 0.5759 (soft-Tan) | 0.119           |
+| DreaMS 30k (`dreams_30k`)              | 30,000 (from 20k, LR restarted) | 0.6000            | 0.719  | not scored  |        | 0.5972 (soft-Tan) | 0.126           |
+| DreaMS 40k (`dreams_40k`)              | 40,000 (from 20k, LR restarted) | 0.6353            | 0.743  | not scored  |        | 0.6206 (soft-Tan) | 0.149           |
 
 Own 20k / 30k: scored with `eval_ckpt.py`. FPNet 5k / DreaMS: in-training evaluation (soft-Tanimoto).
 
@@ -203,8 +207,11 @@ Own 20k / 30k: scored with `eval_ckpt.py`. FPNet 5k / DreaMS: in-training evalua
 | Own FPNet 20k              | own 20k          | original | 0.272     |
 | Own FPNet 30k              | own 30k          | original | 0.271     |
 | Own FPNet 20k + fixed pool | own 20k          | fixed    | 0.266     |
-| DreaMS 5k                  | dreams_fp_5k.pt  | fixed    |           |
-| DreaMS 20k                 | dreams_fp_20k.pt |          |           |
+| DreaMS 5k                  | dreams_fp_5k.pt  | fixed    | 0.279     |
+| DreaMS 20k                 | dreams_fp_20k.pt | fixed    | 0.299     |
+| DreaMS 20k                 | dreams_fp_20k.pt | fixed    | 0.2       |
+| DreaMS 30k                 | dreams_fp_30k.pt | fixed    | 0.286     |
+| DreaMS 40k                 | dreams_fp_40k.pt | fixed    | 0.292     |
 
 ## Artifacts
 
@@ -223,3 +230,28 @@ Loader file for both DreaMS models: `dreams_fp_infer.py` (same dataset).
 - Adapter vs DreaMS preprocessing: 15 of 300 spectra differ; tie check output not seen
 - `_logits_from` row-alignment bug present in the notebook (all swaps)
 - DreaMS not scored under log-likelihood scorer
+
+# Exp-log: exp_0002 (isomer panel dev metric + DreaMS 30k/40k)
+
+created: 2026-10-02
+updated: 2026-10-02
+exp_id: 0002
+
+1. Goal: local metric that reproduces the LB order on the fixed pool: own FPNet 20k (0.266) < DreaMS 5k (0.279) < DreaMS 20k (0.299) < frozen FPNet (0.315). Old local MRR (3,280 mixed-formula molecules) did not: DreaMS 20k 0.564 vs own 20k 0.573.
+2. Panel: true structure vs all same-formula pool structures, scored by candidate_bits . mean_logits (6930 bits).
+3. Data: pool 712,199 rows, all 4,297 val molecules in pool (250 NP = enveda-np-examples). Pool formulas from RDKit SMILES (111 s): 0 mismatches vs train.parquet on all val molecules and a 3,000-row sample.
+4. Panel sizes: median 32, mean 67.9, max 551. 264 panels of size 1 (NP: 9), flagged. 291,646 panel rows over 153,312 unique pool rows.
+5. Tautomers (casmi.chem.metric_ik14, 295 s): 66/4,297 truths have metric key != raw ik14 (NP 16/250). 82 twin decoys in 68 panels (NP 25 in 21). Twins marked correct, as in the real metric.
+6. Random-ranking MRR: all panels 0.2407, panels with decoys 0.190 (n=4,028). NP: 0.2061 / 0.1765 (n=241).
+7. Smoke test (60 molecules, 52 NP, not meaningful): frozen 0.618 vs DreaMS 20k 0.584 MRR on panels with decoys, delta CI [-0.053, +0.129]. Val BCE per bit: frozen 0.386, DreaMS 0.152 (no leakage sign). DreaMS speed ~54 spectra/s, ~22 min per full run.
+8. Models: DreaMS 30k downloaded locally (step not yet verified with ckpt_probe). DreaMS 40k + fixed pool: to be submitted, LB pending. Own FPNet 20k checkpoint location still unknown.
+9. Caveats: panel tests the FPNet channel only; val truths are train rows (hidden C2 truths are COCONUT rows); val has 16.6 spectra/molecule (NP ~175) vs test median 3, so per-spectrum logits are saved to score random 3-spectrum subsets.
+10. Artifacts: artifacts/panel/{panel_v2.npz, pool_formulas.npy, metric_ik14_panel.parquet}; scripts src/scripts/{build_panels, panel_twins, panel_logits, panel_score, ckpt_probe}.py.
+
+Model testing on local with updated test set (tautomers and isomers tested): to be tested later.
+
+# Exp-log: exp_0003 DreaMS_20k rebuilding Ranker and
+
+# Getting started with Pubchem
+
+1.
