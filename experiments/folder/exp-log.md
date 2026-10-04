@@ -254,4 +254,65 @@ Model testing on local with updated test set (tautomers and isomers tested): to 
 
 # Getting started with Pubchem
 
-1.
+## exp_023 — PubChem class-2 candidate pool (2026-10-03)
+
+**Goal:** Make PubChem-only class-2 molecules reachable (they currently score 0 because they're absent from the pool).
+**Status:** Pool rows built (steps 00–06). Fingerprints, merge, reachability and ranker retrain pending. No LB score yet.
+
+### Approach
+
+- Annotation-based, not an NP-likeness sweep:
+  - Tier 1 = PubChem taxonomy links (LOTUS, NPASS, KNApSAcK, NPAtlas, FooDB, HMDB…).
+  - Tier 2 = PubChemLite for Exposomics.
+- Dedup against the pool on the **scorer key** (tautomer-canonical InChIKey14), then collapse within PubChem.
+- Same V17 fingerprint recipe as the pool. Code: `pubchem_c2/` (steps 00–09). Outputs: `artifacts/pubchem_c2/`.
+
+### Inputs (downloaded 2026-10-03)
+
+- `Target/taxonomy2cid.tsv.gz` (56 MB). Renamed by PubChem from `taxonomy2cid.gz`.
+- `CID-SMILES.gz` (1,487 MB), `CID-Preferred.gz` (13 MB), `CID-PMID.gz` (326 MB).
+- `PubChemLite_exposomics_20260925.csv` (200 MB, Zenodo record 22953038, CC BY 4.0).
+
+### Checks
+
+- **Parity (00):** fp 3000/3000 bit-identical.
+  - Pool mass = CalcExactMolWt (max diff 6e-5, float32).
+  - Pool keys = plain IK14 (metric key agrees on only 93.3%, so dedup must use metric key).
+  - Charged rows 0.07%.
+- **Standardiser calibration (04, 5k train∩PCL):**
+  - `cleanup_lf_unch` 97.4% fp-identical (chosen).
+  - raw 97.1%.
+  - +tautomer 93.4%, so train SMILES are NOT tautomer-canonical.
+- **Smoke (05, 20k):** 644 mol/s. ok 73.3%, mass 19.6%, elements 3.7%, charged 3.4%.
+
+### Result (06)
+
+|                            | Rows                                                                                |
+| -------------------------- | ----------------------------------------------------------------------------------- |
+| Removed as already in pool | 308,679 (metric key) + 652 (plain key)                                              |
+| **New structures**         | **312,208 (+43.8% pool)**                                                           |
+| Tier 1 (taxonomy)          | 12,539 (HMDB 11,420 · KNApSAcK 380 · NPASS 137 · LOTUS 131 · NPAtlas 16 · FooDB 13) |
+| Tier 2 (PubChemLite only)  | 299,669                                                                             |
+
+### Takeaways
+
+- Known NPs are already covered by COCONUT; Tier 1 adds little.
+- The addition is ~96% exposome/synthetic (drugs, agro, food, industrial), so the dilution risk is high.
+
+### Issues hit
+
+- Taxonomy file renamed (404). Fixed URL.
+- `CASMI_ROOT` / path confusion. Standardised on `~/casmi_env.sh`.
+- RDKit tautomer-limit warnings in pool key job. Harmless (scorer has the same limits). Silenced in `common.py`.
+
+### Next
+
+1. 09 reachability → `newly_reachable%` per tier on NP libs (go/no-go).
+2. Profile Tier 2 (categories, NP-likeness).
+3. 07 fingerprints. 08 merge variants: `t1`, `t12`, possibly filtered-Tier-2.
+4. Check crowding (`frac_gt_256`).
+5. Retrain ranker on merged pool. Annotation features attached by key to ALL rows; never use `src`.
+
+### Open
+
+- Own fine-tuned DreaMS: output type (fp bits / spectrum emb / joint emb) and whether trained with structure-held-out folds. Decides step-07 extension and leakage handling.
